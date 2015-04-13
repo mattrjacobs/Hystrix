@@ -15,14 +15,6 @@
  */
 package com.netflix.hystrix;
 
-import com.netflix.hystrix.strategy.HystrixPlugins;
-import com.netflix.hystrix.strategy.eventnotifier.HystrixEventNotifier;
-import com.netflix.hystrix.util.HystrixRollingNumber;
-import com.netflix.hystrix.util.HystrixRollingNumberEvent;
-import com.netflix.hystrix.util.HystrixRollingPercentile;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.Collection;
 import java.util.Collections;
 import java.util.concurrent.ConcurrentHashMap;
@@ -30,9 +22,15 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.netflix.hystrix.exception.HystrixBadRequestException;
-
+import com.netflix.hystrix.strategy.HystrixPlugins;
+import com.netflix.hystrix.strategy.eventnotifier.HystrixEventNotifier;
+import com.netflix.hystrix.util.HystrixRollingNumber;
+import com.netflix.hystrix.util.HystrixRollingNumberEvent;
+import com.netflix.hystrix.util.HystrixRollingPercentile;
 /**
  * Used by {@link HystrixCommand} to record metrics.
  */

@@ -15,14 +15,15 @@
  */
 package com.netflix.hystrix;
 
+import static org.junit.Assert.assertEquals;
+
+import org.junit.After;
+import org.junit.Test;
+
 import com.netflix.config.ConfigurationManager;
 import com.netflix.hystrix.HystrixCommandProperties.ExecutionIsolationStrategy;
 import com.netflix.hystrix.HystrixCommandProperties.Setter;
 import com.netflix.hystrix.strategy.properties.HystrixProperty;
-import org.junit.After;
-import org.junit.Test;
-
-import static org.junit.Assert.assertEquals;
 
 public class HystrixCommandPropertiesTest {
 
