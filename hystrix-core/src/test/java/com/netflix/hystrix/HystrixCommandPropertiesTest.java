@@ -350,4 +350,17 @@ public class HystrixCommandPropertiesTest {
         ConfigurationManager.getConfigInstance().clearProperty("unitTestPrefix.command.TEST.threadPoolKeyOverride");
     }
 
+    @Test
+    public void testForcingDefaultCircuitOpen() {
+        final String configName = "hystrix.command.default.circuitBreaker.forceOpen";
+
+        ConfigurationManager.getConfigInstance().setProperty(configName, "true");
+        HystrixCommandProperties propertiesTrue = new TestPropertiesCommand(TestKey.TEST, new Setter(), "hystrix");
+        System.out.println("Force Open? : " + propertiesTrue.circuitBreakerForceOpen().get());
+
+        ConfigurationManager.getConfigInstance().setProperty(configName, "false");
+        HystrixCommandProperties propertiesFalse = new TestPropertiesCommand(TestKey.TEST, new Setter(), "hystrix");
+        System.out.println("Force Open? : " + propertiesFalse.circuitBreakerForceOpen().get());
+    }
+
 }
