@@ -274,7 +274,6 @@ public class HystrixRollingPercentile {
                             if (allBuckets.length == numberOfBuckets) {
                                 //we can recycle the old histogram
                                 Bucket bucketToRecycle = allBuckets[0];
-                                System.out.println("Found bucket to recycle : " + bucketToRecycle + " : " + bucketToRecycle.windowStart);
                                 currentBucketValue = recorder.getIntervalHistogram(bucketToRecycle.histogram);
 
                             } else {
