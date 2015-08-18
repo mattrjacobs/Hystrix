@@ -42,7 +42,6 @@ public class HystrixCommandMetricsSummary extends HystrixCommandMetrics {
         this.percentileTotal = new HystrixRollingPercentile(properties.metricsRollingPercentileWindowInMilliseconds().get(), properties.metricsRollingPercentileWindowBuckets().get(), properties.metricsRollingPercentileBucketSize().get(), properties.metricsRollingPercentileEnabled());
     }
 
-
     @Override
     protected void clear() {
         // TODO can we do without this somehow?

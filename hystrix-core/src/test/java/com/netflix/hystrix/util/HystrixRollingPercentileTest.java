@@ -34,7 +34,7 @@ import org.junit.Test;
 
 import com.netflix.hystrix.strategy.properties.HystrixProperty;
 import com.netflix.hystrix.util.HystrixRollingPercentile.PercentileSnapshot;
-import com.netflix.hystrix.util.HystrixRollingPercentile.Time;
+import com.netflix.hystrix.util.HystrixRollingMetrics.Time;
 
 public class HystrixRollingPercentileTest {
 
@@ -329,8 +329,8 @@ public class HystrixRollingPercentileTest {
         final MockedTime time = new MockedTime();
         final HystrixRollingPercentile p = new HystrixRollingPercentile(time, 100, 25, HystrixProperty.Factory.asProperty(true));
 
-        final int NUM_THREADS = 1000;
-        final int NUM_ITERATIONS = 1000000;
+        final int NUM_THREADS = 10;
+        final int NUM_ITERATIONS = 1000;
 
         final CountDownLatch latch = new CountDownLatch(NUM_THREADS);
 
@@ -343,7 +343,6 @@ public class HystrixRollingPercentileTest {
             public void run() {
                 while (!Thread.currentThread().isInterrupted()) {
                     aggregateMetrics.addAndGet(p.getMean() + p.getPercentile(10) + p.getPercentile(50) + p.getPercentile(90));
-                    //System.out.println("AGGREGATE : " + p.getPercentile(10) + " : " + p.getPercentile(50) + " : " + p.getPercentile(90));
                 }
             }
         });
@@ -366,7 +365,7 @@ public class HystrixRollingPercentileTest {
         }
 
         try {
-            latch.await(100, TimeUnit.SECONDS);
+            latch.await(1, TimeUnit.SECONDS);
             metricsPoller.cancel(true);
         } catch (InterruptedException ex) {
             fail("Timeout on all threads writing percentiles");
@@ -382,7 +381,7 @@ public class HystrixRollingPercentileTest {
         final HystrixRollingPercentile p = new HystrixRollingPercentile(time, 100, 25, HystrixProperty.Factory.asProperty(true));
 
         final int NUM_THREADS = 100;
-        final int NUM_ITERATIONS = 100000;
+        final int NUM_ITERATIONS = 10000;
 
         final CountDownLatch latch = new CountDownLatch(NUM_THREADS);
 
@@ -420,7 +419,6 @@ public class HystrixRollingPercentileTest {
             testThreadSafety();
         }
     }
-
 
     private static class MockedTime implements Time {
 

@@ -26,6 +26,7 @@ import com.netflix.hystrix.HystrixCommandMetrics.HealthCounts;
  * <p>
  * It will then allow single retries after a defined sleepWindow until the execution succeeds at which point it will again close the circuit and allow executions again.
  */
+//TODO should support MockedTime
 public interface HystrixCircuitBreaker {
 
     /**

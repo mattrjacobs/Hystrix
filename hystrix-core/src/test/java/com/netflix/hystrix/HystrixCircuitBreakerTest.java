@@ -102,6 +102,8 @@ public class HystrixCircuitBreakerTest {
             metrics.markFailure(1000);
             metrics.markFailure(1000);
 
+            Thread.sleep(1000);
+
             // everything has failed in the test window so we should return false now
             assertFalse(cb.allowRequest());
             assertTrue(cb.isOpen());
@@ -136,6 +138,8 @@ public class HystrixCircuitBreakerTest {
             metrics.markFailure(10);
             metrics.markFailure(10);
 
+            Thread.sleep(1000);
+
             // this should trip the circuit as the error percentage is above the threshold
             assertFalse(cb.allowRequest());
             assertTrue(cb.isOpen());
@@ -169,6 +173,8 @@ public class HystrixCircuitBreakerTest {
             metrics.markFailure(10);
             metrics.markFailure(10);
 
+            Thread.sleep(1000);
+
             // this should remain open as the failure threshold is below the percentage limit
             assertTrue(cb.allowRequest());
             assertFalse(cb.isOpen());
@@ -197,6 +203,8 @@ public class HystrixCircuitBreakerTest {
             metrics.markTimeout(2000);
             metrics.markTimeout(2000);
             metrics.markTimeout(2000);
+
+            Thread.sleep(1000);
 
             // everything has been a timeout so we should not allow any requests
             assertFalse(cb.allowRequest());
@@ -231,6 +239,8 @@ public class HystrixCircuitBreakerTest {
             metrics.markSuccess(400);
             metrics.markTimeout(10);
             metrics.markTimeout(10);
+
+            Thread.sleep(1000);
 
             // this should trip the circuit as the error percentage is above the threshold
             assertFalse(cb.allowRequest());

@@ -22,8 +22,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.Test;
 
-import com.netflix.hystrix.util.HystrixRollingNumber.Time;
-
 public class HystrixRollingNumberTest {
 
     @Test
@@ -34,7 +32,7 @@ public class HystrixRollingNumberTest {
             // confirm the initial settings
             assertEquals(200, counter.timeInMilliseconds);
             assertEquals(10, counter.numberOfBuckets);
-            assertEquals(20, counter.bucketSizeInMillseconds);
+            assertEquals(20, counter.bucketSizeInMilliseconds);
 
             // we start out with 0 buckets in the queue
             assertEquals(0, counter.buckets.size());
@@ -42,7 +40,7 @@ public class HystrixRollingNumberTest {
             // add a success in each interval which should result in all 10 buckets being created with 1 success in each
             for (int i = 0; i < counter.numberOfBuckets; i++) {
                 counter.increment(HystrixRollingNumberEvent.SUCCESS);
-                time.increment(counter.bucketSizeInMillseconds);
+                time.increment(counter.bucketSizeInMilliseconds);
             }
 
             // confirm we have all 10 buckets
@@ -101,7 +99,7 @@ public class HystrixRollingNumberTest {
             assertEquals(1, counter.buckets.size());
 
             // wait past 3 bucket time periods (the 1st bucket then 2 empty ones)
-            time.increment(counter.bucketSizeInMillseconds * 3);
+            time.increment(counter.bucketSizeInMilliseconds * 3);
 
             // add another
             counter.increment(HystrixRollingNumberEvent.SUCCESS);
@@ -133,11 +131,16 @@ public class HystrixRollingNumberTest {
             // we should have 1 bucket
             assertEquals(1, counter.buckets.size());
 
-            // the count should be 4
-            assertEquals(4, counter.buckets.getLast().getAdder(HystrixRollingNumberEvent.SUCCESS).sum());
-            assertEquals(2, counter.buckets.getLast().getAdder(HystrixRollingNumberEvent.FAILURE).sum());
-            assertEquals(1, counter.buckets.getLast().getAdder(HystrixRollingNumberEvent.TIMEOUT).sum());
+            // the count should be 4 - but these are in the write-only bucket.  so assert they are 0 now and show up after the next bucket rolls in
+            assertEquals(0, counter.getRollingSum(HystrixRollingNumberEvent.SUCCESS));
+            assertEquals(0, counter.getRollingSum(HystrixRollingNumberEvent.FAILURE));
+            assertEquals(0, counter.getRollingSum(HystrixRollingNumberEvent.TIMEOUT));
 
+            time.increment(counter.bucketSizeInMilliseconds);
+
+            assertEquals(4, counter.getRollingSum(HystrixRollingNumberEvent.SUCCESS));
+            assertEquals(2, counter.getRollingSum(HystrixRollingNumberEvent.FAILURE));
+            assertEquals(1, counter.getRollingSum(HystrixRollingNumberEvent.TIMEOUT));
         } catch (Exception e) {
             e.printStackTrace();
             fail("Exception: " + e.getMessage());
@@ -156,24 +159,26 @@ public class HystrixRollingNumberTest {
             // we should have 1 bucket
             assertEquals(1, counter.buckets.size());
 
-            // the count should be 1
-            assertEquals(1, counter.buckets.getLast().getAdder(HystrixRollingNumberEvent.TIMEOUT).sum());
+            // the count should be 0 until we roll the write-only bucket nto the read-only snapshot, and 1 after
+            assertEquals(0, counter.getRollingSum(HystrixRollingNumberEvent.TIMEOUT));
+            assertEquals(0, counter.getCumulativeSum(HystrixRollingNumberEvent.TIMEOUT));
+            time.increment(counter.bucketSizeInMilliseconds);
             assertEquals(1, counter.getRollingSum(HystrixRollingNumberEvent.TIMEOUT));
+            assertEquals(1, counter.getCumulativeSum(HystrixRollingNumberEvent.TIMEOUT));
 
             // sleep to get to a new bucket
-            time.increment(counter.bucketSizeInMillseconds * 3);
+            time.increment(counter.bucketSizeInMilliseconds * 2);
 
-            // incremenet again in latest bucket
+            // increment again in latest bucket
             counter.increment(HystrixRollingNumberEvent.TIMEOUT);
 
             // we should have 4 buckets
             assertEquals(4, counter.buckets.size());
 
-            // the counts of the last bucket
-            assertEquals(1, counter.buckets.getLast().getAdder(HystrixRollingNumberEvent.TIMEOUT).sum());
-
-            // the total counts
+            // the total counts should show up after the write-only bucket becomes readable
+            time.increment(counter.bucketSizeInMilliseconds);
             assertEquals(2, counter.getRollingSum(HystrixRollingNumberEvent.TIMEOUT));
+            assertEquals(2, counter.getCumulativeSum(HystrixRollingNumberEvent.TIMEOUT));
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -193,24 +198,26 @@ public class HystrixRollingNumberTest {
             // we should have 1 bucket
             assertEquals(1, counter.buckets.size());
 
-            // the count should be 1
-            assertEquals(1, counter.buckets.getLast().getAdder(HystrixRollingNumberEvent.SHORT_CIRCUITED).sum());
+            // the count should be 0 until we roll the write-only bucket into the read-only snapshot, and 1 after
+            assertEquals(0, counter.getRollingSum(HystrixRollingNumberEvent.SHORT_CIRCUITED));
+            assertEquals(0, counter.getCumulativeSum(HystrixRollingNumberEvent.SHORT_CIRCUITED));
+            time.increment(counter.bucketSizeInMilliseconds);
             assertEquals(1, counter.getRollingSum(HystrixRollingNumberEvent.SHORT_CIRCUITED));
+            assertEquals(1, counter.getCumulativeSum(HystrixRollingNumberEvent.SHORT_CIRCUITED));
 
             // sleep to get to a new bucket
-            time.increment(counter.bucketSizeInMillseconds * 3);
+            time.increment(counter.bucketSizeInMilliseconds * 2);
 
-            // incremenet again in latest bucket
+            // increment again in latest bucket
             counter.increment(HystrixRollingNumberEvent.SHORT_CIRCUITED);
 
             // we should have 4 buckets
             assertEquals(4, counter.buckets.size());
 
-            // the counts of the last bucket
-            assertEquals(1, counter.buckets.getLast().getAdder(HystrixRollingNumberEvent.SHORT_CIRCUITED).sum());
-
-            // the total counts
+            // the total counts should show up after the write-only bucket becomes readable
+            time.increment(counter.bucketSizeInMilliseconds);
             assertEquals(2, counter.getRollingSum(HystrixRollingNumberEvent.SHORT_CIRCUITED));
+            assertEquals(2, counter.getCumulativeSum(HystrixRollingNumberEvent.SHORT_CIRCUITED));
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -238,6 +245,11 @@ public class HystrixRollingNumberTest {
         testCounterType(HystrixRollingNumberEvent.EXCEPTION_THROWN);
     }
 
+    @Test
+    public void testBadRequest() {
+        testCounterType(HystrixRollingNumberEvent.BAD_REQUEST);
+    }
+
     private void testCounterType(HystrixRollingNumberEvent type) {
         MockedTime time = new MockedTime();
         try {
@@ -249,12 +261,15 @@ public class HystrixRollingNumberTest {
             // we should have 1 bucket
             assertEquals(1, counter.buckets.size());
 
-            // the count should be 1
-            assertEquals(1, counter.buckets.getLast().getAdder(type).sum());
+            // the count should be 0 until we roll the write-only bucket into the read-only snapshot, and 1 after
+            assertEquals(0, counter.getRollingSum(type));
+            assertEquals(0, counter.getCumulativeSum(type));
+            time.increment(counter.bucketSizeInMilliseconds);
             assertEquals(1, counter.getRollingSum(type));
+            assertEquals(1, counter.getCumulativeSum(type));
 
             // sleep to get to a new bucket
-            time.increment(counter.bucketSizeInMillseconds * 3);
+            time.increment(counter.bucketSizeInMilliseconds * 2);
 
             // increment again in latest bucket
             counter.increment(type);
@@ -262,12 +277,10 @@ public class HystrixRollingNumberTest {
             // we should have 4 buckets
             assertEquals(4, counter.buckets.size());
 
-            // the counts of the last bucket
-            assertEquals(1, counter.buckets.getLast().getAdder(type).sum());
-
-            // the total counts
+            // the total counts should show up after the write-only bucket becomes readable
+            time.increment(counter.bucketSizeInMilliseconds);
             assertEquals(2, counter.getRollingSum(type));
-
+            assertEquals(2, counter.getCumulativeSum(type));
         } catch (Exception e) {
             e.printStackTrace();
             fail("Exception: " + e.getMessage());
@@ -292,7 +305,13 @@ public class HystrixRollingNumberTest {
             counter.increment(HystrixRollingNumberEvent.SHORT_CIRCUITED);
 
             // sleep to get to a new bucket
-            time.increment(counter.bucketSizeInMillseconds * 3);
+            time.increment(counter.bucketSizeInMilliseconds * 3);
+
+            // the total counts
+            assertEquals(4, counter.getRollingSum(HystrixRollingNumberEvent.SUCCESS));
+            assertEquals(2, counter.getRollingSum(HystrixRollingNumberEvent.FAILURE));
+            assertEquals(2, counter.getRollingSum(HystrixRollingNumberEvent.TIMEOUT));
+            assertEquals(1, counter.getRollingSum(HystrixRollingNumberEvent.SHORT_CIRCUITED));
 
             // increment
             counter.increment(HystrixRollingNumberEvent.SUCCESS);
@@ -306,11 +325,8 @@ public class HystrixRollingNumberTest {
             // we should have 4 buckets
             assertEquals(4, counter.buckets.size());
 
-            // the counts of the last bucket
-            assertEquals(2, counter.buckets.getLast().getAdder(HystrixRollingNumberEvent.SUCCESS).sum());
-            assertEquals(3, counter.buckets.getLast().getAdder(HystrixRollingNumberEvent.FAILURE).sum());
-            assertEquals(1, counter.buckets.getLast().getAdder(HystrixRollingNumberEvent.TIMEOUT).sum());
-            assertEquals(1, counter.buckets.getLast().getAdder(HystrixRollingNumberEvent.SHORT_CIRCUITED).sum());
+            //increment the time to make the write-only bucket show up in the read-only data
+            time.increment(counter.bucketSizeInMilliseconds);
 
             // the total counts
             assertEquals(6, counter.getRollingSum(HystrixRollingNumberEvent.SUCCESS));
@@ -324,7 +340,13 @@ public class HystrixRollingNumberTest {
             // increment
             counter.increment(HystrixRollingNumberEvent.SUCCESS);
 
-            // the total counts should now include only the last bucket after a reset since the window passed
+            // the total counts should initially all be 0, as all read-only data has aged-out, and write-only bucket can not be read yet
+            assertEquals(0, counter.getRollingSum(HystrixRollingNumberEvent.SUCCESS));
+            assertEquals(0, counter.getRollingSum(HystrixRollingNumberEvent.FAILURE));
+            assertEquals(0, counter.getRollingSum(HystrixRollingNumberEvent.TIMEOUT));
+
+            // after time passes, write-only bucket can be read, and the single SUCCESS event is visible
+            time.increment(counter.bucketSizeInMilliseconds);
             assertEquals(1, counter.getRollingSum(HystrixRollingNumberEvent.SUCCESS));
             assertEquals(0, counter.getRollingSum(HystrixRollingNumberEvent.FAILURE));
             assertEquals(0, counter.getRollingSum(HystrixRollingNumberEvent.TIMEOUT));
@@ -350,7 +372,7 @@ public class HystrixRollingNumberTest {
             counter.increment(HystrixRollingNumberEvent.FAILURE);
 
             // sleep to get to a new bucket
-            time.increment(counter.bucketSizeInMillseconds * 3);
+            time.increment(counter.bucketSizeInMilliseconds * 3);
 
             // we should have 1 bucket since nothing has triggered the update of buckets in the elapsed time
             assertEquals(1, counter.buckets.size());
@@ -372,9 +394,18 @@ public class HystrixRollingNumberTest {
             // increment
             counter.increment(HystrixRollingNumberEvent.SUCCESS);
 
-            // the total counts should now include only the last bucket after a reset since the window passed
+            // the total counts should now be empty as the read-only data is empty and the latest write is in the write-only data
+            assertEquals(0, counter.getRollingSum(HystrixRollingNumberEvent.SUCCESS));
+            assertEquals(0, counter.getRollingSum(HystrixRollingNumberEvent.FAILURE));
+            assertEquals(4, counter.getCumulativeSum(HystrixRollingNumberEvent.SUCCESS));
+            assertEquals(2, counter.getCumulativeSum(HystrixRollingNumberEvent.FAILURE));
+
+            //but it shows up in read-only as soon as bucket rolls
+            time.increment(counter.bucketSizeInMilliseconds);
             assertEquals(1, counter.getRollingSum(HystrixRollingNumberEvent.SUCCESS));
             assertEquals(0, counter.getRollingSum(HystrixRollingNumberEvent.FAILURE));
+            assertEquals(5, counter.getCumulativeSum(HystrixRollingNumberEvent.SUCCESS));
+            assertEquals(2, counter.getCumulativeSum(HystrixRollingNumberEvent.FAILURE));
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -394,12 +425,15 @@ public class HystrixRollingNumberTest {
             // we should have 1 bucket
             assertEquals(1, counter.buckets.size());
 
-            // the count should be 10
-            assertEquals(10, counter.buckets.getLast().getMaxUpdater(HystrixRollingNumberEvent.THREAD_MAX_ACTIVE).max());
+            // the max should be updated only in the write-only bucket
+            assertEquals(0, counter.getRollingMaxValue(HystrixRollingNumberEvent.THREAD_MAX_ACTIVE));
+
+            // once we roll that into the read-only data, it should be the new max
+            time.increment(counter.bucketSizeInMilliseconds);
             assertEquals(10, counter.getRollingMaxValue(HystrixRollingNumberEvent.THREAD_MAX_ACTIVE));
 
             // sleep to get to a new bucket
-            time.increment(counter.bucketSizeInMillseconds * 3);
+            time.increment(counter.bucketSizeInMilliseconds * 2);
 
             // increment again in latest bucket
             counter.updateRollingMax(HystrixRollingNumberEvent.THREAD_MAX_ACTIVE, 20);
@@ -407,8 +441,13 @@ public class HystrixRollingNumberTest {
             // we should have 4 buckets
             assertEquals(4, counter.buckets.size());
 
-            // the max
-            assertEquals(20, counter.buckets.getLast().getMaxUpdater(HystrixRollingNumberEvent.THREAD_MAX_ACTIVE).max());
+
+            // the new max should be updated only in the write-only bucket
+            assertEquals(10, counter.getRollingMaxValue(HystrixRollingNumberEvent.THREAD_MAX_ACTIVE));
+
+            // once we roll that into the read-only data, it should be the new max
+            time.increment(counter.bucketSizeInMilliseconds);
+            assertEquals(20, counter.getRollingMaxValue(HystrixRollingNumberEvent.THREAD_MAX_ACTIVE));
 
             // counts per bucket
             long values[] = counter.getValues(HystrixRollingNumberEvent.THREAD_MAX_ACTIVE);
@@ -437,12 +476,15 @@ public class HystrixRollingNumberTest {
             // we should have 1 bucket
             assertEquals(1, counter.buckets.size());
 
-            // the count should be 30
-            assertEquals(30, counter.buckets.getLast().getMaxUpdater(HystrixRollingNumberEvent.THREAD_MAX_ACTIVE).max());
+            // the count should be 0 since all writes are not visible yet
+            assertEquals(0, counter.getRollingMaxValue(HystrixRollingNumberEvent.THREAD_MAX_ACTIVE));
+
+            // and they should become visible once the bucket show up in read-only data
+            time.increment(counter.bucketSizeInMilliseconds);
             assertEquals(30, counter.getRollingMaxValue(HystrixRollingNumberEvent.THREAD_MAX_ACTIVE));
 
             // sleep to get to a new bucket
-            time.increment(counter.bucketSizeInMillseconds * 3);
+            time.increment(counter.bucketSizeInMilliseconds * 2);
 
             counter.updateRollingMax(HystrixRollingNumberEvent.THREAD_MAX_ACTIVE, 30);
             counter.updateRollingMax(HystrixRollingNumberEvent.THREAD_MAX_ACTIVE, 30);
@@ -451,9 +493,12 @@ public class HystrixRollingNumberTest {
             // we should have 4 buckets
             assertEquals(4, counter.buckets.size());
 
-            // the count
-            assertEquals(50, counter.buckets.getLast().getMaxUpdater(HystrixRollingNumberEvent.THREAD_MAX_ACTIVE).max());
-            assertEquals(50, counter.getValueOfLatestBucket(HystrixRollingNumberEvent.THREAD_MAX_ACTIVE));
+            // the count should still be 30, as the write of 50 is in write-only space for now
+            assertEquals(30, counter.getRollingMaxValue(HystrixRollingNumberEvent.THREAD_MAX_ACTIVE));
+
+            //and when it rolls into read-only space, it becomes the new rolling max
+            time.increment(counter.bucketSizeInMilliseconds);
+            assertEquals(50, counter.getRollingMaxValue(HystrixRollingNumberEvent.THREAD_MAX_ACTIVE));
 
             // values per bucket
             long values[] = counter.getValues(HystrixRollingNumberEvent.THREAD_MAX_ACTIVE);
@@ -479,17 +524,17 @@ public class HystrixRollingNumberTest {
             counter.updateRollingMax(type, 10);
 
             // sleep to get to a new bucket
-            time.increment(counter.bucketSizeInMillseconds);
+            time.increment(counter.bucketSizeInMilliseconds);
 
             counter.updateRollingMax(type, 30);
 
             // sleep to get to a new bucket
-            time.increment(counter.bucketSizeInMillseconds);
+            time.increment(counter.bucketSizeInMilliseconds);
 
             counter.updateRollingMax(type, 40);
 
             // sleep to get to a new bucket
-            time.increment(counter.bucketSizeInMillseconds);
+            time.increment(counter.bucketSizeInMilliseconds);
 
             counter.updateRollingMax(type, 15);
 
@@ -535,7 +580,7 @@ public class HystrixRollingNumberTest {
             // first bucket
             counter.getCurrentBucket();
             try {
-                time.increment(counter.bucketSizeInMillseconds);
+                time.increment(counter.bucketSizeInMilliseconds);
             } catch (Exception e) {
                 // ignore
             }
@@ -543,9 +588,6 @@ public class HystrixRollingNumberTest {
             assertEquals(2, counter.getValues(type).length);
 
             counter.getValueOfLatestBucket(type);
-
-            // System.out.println("Head: " + counter.buckets.state.get().head);
-            // System.out.println("Tail: " + counter.buckets.state.get().tail);
         }
     }
 
@@ -562,7 +604,7 @@ public class HystrixRollingNumberTest {
             // first bucket
             counter.increment(type);
             try {
-                time.increment(counter.bucketSizeInMillseconds);
+                time.increment(counter.bucketSizeInMilliseconds);
             } catch (Exception e) {
                 // ignore
             }
@@ -590,7 +632,7 @@ public class HystrixRollingNumberTest {
             // first bucket
             counter.increment(type);
             try {
-                time.increment(counter.bucketSizeInMillseconds);
+                time.increment(counter.bucketSizeInMilliseconds);
             } catch (Exception e) {
                 // ignore
             }
@@ -625,7 +667,7 @@ public class HystrixRollingNumberTest {
         // iterate over 20 buckets on a queue sized for 2
         for (int i = 0; i < 20; i++) {
             try {
-                time.increment(counter.bucketSizeInMillseconds);
+                time.increment(counter.bucketSizeInMilliseconds);
             } catch (Exception e) {
                 // ignore
             }
@@ -641,7 +683,8 @@ public class HystrixRollingNumberTest {
         counter.increment(type);
         counter.increment(type);
 
-        // cumulative count should be 5 regardless of buckets rolling
+        // cumulative count should be 5 regardless of buckets rolling, after we let the writes show up in read-only data
+        time.increment(counter.bucketSizeInMilliseconds);
         assertEquals(5, counter.getCumulativeSum(type));
     }
 
@@ -660,7 +703,7 @@ public class HystrixRollingNumberTest {
         // iterate over 20 buckets on a queue sized for 2
         for (int i = 0; i < 20; i++) {
             try {
-                time.increment(counter.bucketSizeInMillseconds);
+                time.increment(counter.bucketSizeInMilliseconds);
             } catch (Exception e) {
                 // ignore
             }
@@ -672,11 +715,12 @@ public class HystrixRollingNumberTest {
         counter.increment(type);
         counter.increment(type);
 
-        // cumulative count should be 5 regardless of buckets rolling
+        // cumulative count should be 5 regardless of buckets rolling, after we let the writes show up in read-only data
+        time.increment(counter.bucketSizeInMilliseconds);
         assertEquals(5, counter.getCumulativeSum(type));
     }
 
-    private static class MockedTime implements Time {
+    private static class MockedTime implements HystrixRollingMetrics.Time {
 
         private AtomicInteger time = new AtomicInteger(0);
 
@@ -690,5 +734,4 @@ public class HystrixRollingNumberTest {
         }
 
     }
-
 }

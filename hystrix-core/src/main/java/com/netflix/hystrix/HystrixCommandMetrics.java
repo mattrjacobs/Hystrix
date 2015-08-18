@@ -420,6 +420,7 @@ public abstract class HystrixCommandMetrics extends HystrixMetrics {
      * 
      * @return {@link HealthCounts}
      */
+    //TODO This could get delegated to HystrixRollingNumber possibly
     public final HealthCounts getHealthCounts() {
         // we put an interval between snapshots so high-volume commands don't 
         // spend too much unnecessary time calculating metrics in very small time periods
