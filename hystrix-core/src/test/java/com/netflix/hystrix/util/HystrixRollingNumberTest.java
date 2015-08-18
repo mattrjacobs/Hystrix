@@ -18,15 +18,14 @@ package com.netflix.hystrix.util;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
-import java.util.concurrent.atomic.AtomicInteger;
-
+import com.netflix.hystrix.util.time.HystrixMockedTime;
 import org.junit.Test;
 
 public class HystrixRollingNumberTest {
 
     @Test
     public void testCreatesBuckets() {
-        MockedTime time = new MockedTime();
+        HystrixMockedTime time = new HystrixMockedTime();
         try {
             HystrixRollingNumber counter = new HystrixRollingNumber(time, 200, 10);
             // confirm the initial settings
@@ -58,7 +57,7 @@ public class HystrixRollingNumberTest {
 
     @Test
     public void testResetBuckets() {
-        MockedTime time = new MockedTime();
+        HystrixMockedTime time = new HystrixMockedTime();
         try {
             HystrixRollingNumber counter = new HystrixRollingNumber(time, 200, 10);
 
@@ -88,7 +87,7 @@ public class HystrixRollingNumberTest {
 
     @Test
     public void testEmptyBucketsFillIn() {
-        MockedTime time = new MockedTime();
+        HystrixMockedTime time = new HystrixMockedTime();
         try {
             HystrixRollingNumber counter = new HystrixRollingNumber(time, 200, 10);
 
@@ -115,7 +114,7 @@ public class HystrixRollingNumberTest {
 
     @Test
     public void testIncrementInSingleBucket() {
-        MockedTime time = new MockedTime();
+        HystrixMockedTime time = new HystrixMockedTime();
         try {
             HystrixRollingNumber counter = new HystrixRollingNumber(time, 200, 10);
 
@@ -149,7 +148,7 @@ public class HystrixRollingNumberTest {
 
     @Test
     public void testTimeout() {
-        MockedTime time = new MockedTime();
+        HystrixMockedTime time = new HystrixMockedTime();
         try {
             HystrixRollingNumber counter = new HystrixRollingNumber(time, 200, 10);
 
@@ -188,7 +187,7 @@ public class HystrixRollingNumberTest {
 
     @Test
     public void testShortCircuited() {
-        MockedTime time = new MockedTime();
+        HystrixMockedTime time = new HystrixMockedTime();
         try {
             HystrixRollingNumber counter = new HystrixRollingNumber(time, 200, 10);
 
@@ -251,7 +250,7 @@ public class HystrixRollingNumberTest {
     }
 
     private void testCounterType(HystrixRollingNumberEvent type) {
-        MockedTime time = new MockedTime();
+        HystrixMockedTime time = new HystrixMockedTime();
         try {
             HystrixRollingNumber counter = new HystrixRollingNumber(time, 200, 10);
 
@@ -289,7 +288,7 @@ public class HystrixRollingNumberTest {
 
     @Test
     public void testIncrementInMultipleBuckets() {
-        MockedTime time = new MockedTime();
+        HystrixMockedTime time = new HystrixMockedTime();
         try {
             HystrixRollingNumber counter = new HystrixRollingNumber(time, 200, 10);
 
@@ -359,7 +358,7 @@ public class HystrixRollingNumberTest {
 
     @Test
     public void testCounterRetrievalRefreshesBuckets() {
-        MockedTime time = new MockedTime();
+        HystrixMockedTime time = new HystrixMockedTime();
         try {
             HystrixRollingNumber counter = new HystrixRollingNumber(time, 200, 10);
 
@@ -415,7 +414,7 @@ public class HystrixRollingNumberTest {
 
     @Test
     public void testUpdateMax1() {
-        MockedTime time = new MockedTime();
+        HystrixMockedTime time = new HystrixMockedTime();
         try {
             HystrixRollingNumber counter = new HystrixRollingNumber(time, 200, 10);
 
@@ -464,7 +463,7 @@ public class HystrixRollingNumberTest {
 
     @Test
     public void testUpdateMax2() {
-        MockedTime time = new MockedTime();
+        HystrixMockedTime time = new HystrixMockedTime();
         try {
             HystrixRollingNumber counter = new HystrixRollingNumber(time, 200, 10);
 
@@ -515,7 +514,7 @@ public class HystrixRollingNumberTest {
 
     @Test
     public void testMaxValue() {
-        MockedTime time = new MockedTime();
+        HystrixMockedTime time = new HystrixMockedTime();
         try {
             HystrixRollingNumberEvent type = HystrixRollingNumberEvent.THREAD_MAX_ACTIVE;
 
@@ -548,7 +547,7 @@ public class HystrixRollingNumberTest {
 
     @Test
     public void testEmptySum() {
-        MockedTime time = new MockedTime();
+        HystrixMockedTime time = new HystrixMockedTime();
         HystrixRollingNumberEvent type = HystrixRollingNumberEvent.COLLAPSED;
         HystrixRollingNumber counter = new HystrixRollingNumber(time, 200, 10);
         assertEquals(0, counter.getRollingSum(type));
@@ -556,7 +555,7 @@ public class HystrixRollingNumberTest {
 
     @Test
     public void testEmptyMax() {
-        MockedTime time = new MockedTime();
+        HystrixMockedTime time = new HystrixMockedTime();
         HystrixRollingNumberEvent type = HystrixRollingNumberEvent.THREAD_MAX_ACTIVE;
         HystrixRollingNumber counter = new HystrixRollingNumber(time, 200, 10);
         assertEquals(0, counter.getRollingMaxValue(type));
@@ -564,7 +563,7 @@ public class HystrixRollingNumberTest {
 
     @Test
     public void testEmptyLatestValue() {
-        MockedTime time = new MockedTime();
+        HystrixMockedTime time = new HystrixMockedTime();
         HystrixRollingNumberEvent type = HystrixRollingNumberEvent.THREAD_MAX_ACTIVE;
         HystrixRollingNumber counter = new HystrixRollingNumber(time, 200, 10);
         assertEquals(0, counter.getValueOfLatestBucket(type));
@@ -572,7 +571,7 @@ public class HystrixRollingNumberTest {
 
     @Test
     public void testRolling() {
-        MockedTime time = new MockedTime();
+        HystrixMockedTime time = new HystrixMockedTime();
         HystrixRollingNumberEvent type = HystrixRollingNumberEvent.THREAD_MAX_ACTIVE;
         HystrixRollingNumber counter = new HystrixRollingNumber(time, 20, 2);
         // iterate over 20 buckets on a queue sized for 2
@@ -593,7 +592,7 @@ public class HystrixRollingNumberTest {
 
     @Test
     public void testCumulativeCounterAfterRolling() {
-        MockedTime time = new MockedTime();
+        HystrixMockedTime time = new HystrixMockedTime();
         HystrixRollingNumberEvent type = HystrixRollingNumberEvent.SUCCESS;
         HystrixRollingNumber counter = new HystrixRollingNumber(time, 20, 2);
 
@@ -621,7 +620,7 @@ public class HystrixRollingNumberTest {
 
     @Test
     public void testCumulativeCounterAfterRollingAndReset() {
-        MockedTime time = new MockedTime();
+        HystrixMockedTime time = new HystrixMockedTime();
         HystrixRollingNumberEvent type = HystrixRollingNumberEvent.SUCCESS;
         HystrixRollingNumber counter = new HystrixRollingNumber(time, 20, 2);
 
@@ -654,7 +653,7 @@ public class HystrixRollingNumberTest {
 
     @Test
     public void testCumulativeCounterAfterRollingAndReset2() {
-        MockedTime time = new MockedTime();
+        HystrixMockedTime time = new HystrixMockedTime();
         HystrixRollingNumberEvent type = HystrixRollingNumberEvent.SUCCESS;
         HystrixRollingNumber counter = new HystrixRollingNumber(time, 20, 2);
 
@@ -690,7 +689,7 @@ public class HystrixRollingNumberTest {
 
     @Test
     public void testCumulativeCounterAfterRollingAndReset3() {
-        MockedTime time = new MockedTime();
+        HystrixMockedTime time = new HystrixMockedTime();
         HystrixRollingNumberEvent type = HystrixRollingNumberEvent.SUCCESS;
         HystrixRollingNumber counter = new HystrixRollingNumber(time, 20, 2);
 
@@ -718,20 +717,5 @@ public class HystrixRollingNumberTest {
         // cumulative count should be 5 regardless of buckets rolling, after we let the writes show up in read-only data
         time.increment(counter.bucketSizeInMilliseconds);
         assertEquals(5, counter.getCumulativeSum(type));
-    }
-
-    private static class MockedTime implements HystrixRollingMetrics.Time {
-
-        private AtomicInteger time = new AtomicInteger(0);
-
-        @Override
-        public long getCurrentTimeInMillis() {
-            return time.get();
-        }
-
-        public void increment(int millis) {
-            time.addAndGet(millis);
-        }
-
     }
 }

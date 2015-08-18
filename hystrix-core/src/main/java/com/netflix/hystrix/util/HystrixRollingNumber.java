@@ -19,6 +19,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.locks.ReentrantLock;
 
+import com.netflix.hystrix.util.time.HystrixActualTime;
+import com.netflix.hystrix.util.time.HystrixTime;
 import org.HdrHistogram.Histogram;
 import org.HdrHistogram.Recorder;
 import org.slf4j.Logger;
@@ -92,10 +94,11 @@ public class HystrixRollingNumber extends HystrixRollingMetrics<HystrixCountersB
     }
 
     public HystrixRollingNumber(int timeInMilliseconds, int numberOfBuckets) {
-        this(new HystrixRollingMetrics.ActualTime(), timeInMilliseconds, numberOfBuckets);
+        this(HystrixActualTime.getInstance(), timeInMilliseconds, numberOfBuckets);
     }
 
-    /* package for testing */ HystrixRollingNumber(HystrixRollingMetrics.Time time, int timeInMilliseconds, int numberOfBuckets) {
+    //TODO was not public in 1.4, should not be public in 1.5
+    public HystrixRollingNumber(HystrixTime time, int timeInMilliseconds, int numberOfBuckets) {
         super(time, timeInMilliseconds, numberOfBuckets, HystrixProperty.Factory.asProperty(true));
     }
 

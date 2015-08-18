@@ -26,6 +26,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.netflix.hystrix.util.time.HystrixMockedTime;
 import org.HdrHistogram.Histogram;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -34,7 +35,6 @@ import org.junit.Test;
 
 import com.netflix.hystrix.strategy.properties.HystrixProperty;
 import com.netflix.hystrix.util.HystrixRollingPercentile.PercentileSnapshot;
-import com.netflix.hystrix.util.HystrixRollingMetrics.Time;
 
 public class HystrixRollingPercentileTest {
 
@@ -61,7 +61,7 @@ public class HystrixRollingPercentileTest {
 
     @Test
     public void testRolling() {
-        MockedTime time = new MockedTime();
+        HystrixMockedTime time = new HystrixMockedTime();
         HystrixRollingPercentile p = new HystrixRollingPercentile(time, timeInMilliseconds, numberOfBuckets, enabled);
         p.addValue(100);
         p.addValue(100);
@@ -124,7 +124,7 @@ public class HystrixRollingPercentileTest {
 
     @Test
     public void testValueIsZeroAfterRollingWindowPassesAndNoTraffic() {
-        MockedTime time = new MockedTime();
+        HystrixMockedTime time = new HystrixMockedTime();
         HystrixRollingPercentile p = new HystrixRollingPercentile(time, timeInMilliseconds, numberOfBuckets, enabled);
         p.addValue(100);
         p.addValue(100);
@@ -156,7 +156,7 @@ public class HystrixRollingPercentileTest {
     public void testSampleDataOverTime1() {
         System.out.println("\n\n***************************** testSampleDataOverTime1 \n");
 
-        MockedTime time = new MockedTime();
+        HystrixMockedTime time = new HystrixMockedTime();
         HystrixRollingPercentile p = new HystrixRollingPercentile(time, timeInMilliseconds, numberOfBuckets, enabled);
         int previousTime = 0;
         for (int i = 0; i < SampleDataHolder1.data.length; i++) {
@@ -191,7 +191,7 @@ public class HystrixRollingPercentileTest {
     @Test
     public void testSampleDataOverTime2() {
         System.out.println("\n\n***************************** testSampleDataOverTime2 \n");
-        MockedTime time = new MockedTime();
+        HystrixMockedTime time = new HystrixMockedTime();
         int previousTime = 0;
         HystrixRollingPercentile p = new HystrixRollingPercentile(time, timeInMilliseconds, numberOfBuckets, enabled);
         for (int i = 0; i < SampleDataHolder2.data.length; i++) {
@@ -308,7 +308,7 @@ public class HystrixRollingPercentileTest {
      */
     @Test
     public void testDoesNothingWhenDisabled() {
-        MockedTime time = new MockedTime();
+        HystrixMockedTime time = new HystrixMockedTime();
         int previousTime = 0;
         HystrixRollingPercentile p = new HystrixRollingPercentile(time, timeInMilliseconds, numberOfBuckets, HystrixProperty.Factory.asProperty(false));
         for (int i = 0; i < SampleDataHolder2.data.length; i++) {
@@ -326,7 +326,7 @@ public class HystrixRollingPercentileTest {
 
     @Test
     public void testThreadSafety() {
-        final MockedTime time = new MockedTime();
+        final HystrixMockedTime time = new HystrixMockedTime();
         final HystrixRollingPercentile p = new HystrixRollingPercentile(time, 100, 25, HystrixProperty.Factory.asProperty(true));
 
         final int NUM_THREADS = 10;
@@ -377,7 +377,7 @@ public class HystrixRollingPercentileTest {
 
     @Test
     public void testWriteThreadSafety() {
-        final MockedTime time = new MockedTime();
+        final HystrixMockedTime time = new HystrixMockedTime();
         final HystrixRollingPercentile p = new HystrixRollingPercentile(time, 100, 25, HystrixProperty.Factory.asProperty(true));
 
         final int NUM_THREADS = 100;
@@ -418,21 +418,6 @@ public class HystrixRollingPercentileTest {
         for (int i = 0; i < 100; i++) {
             testThreadSafety();
         }
-    }
-
-    private static class MockedTime implements Time {
-
-        private AtomicInteger time = new AtomicInteger(0);
-
-        @Override
-        public long getCurrentTimeInMillis() {
-            return time.get();
-        }
-
-        public void increment(int millis) {
-            time.addAndGet(millis);
-        }
-
     }
 
     /* sub-class to avoid 65k limit of a single class */

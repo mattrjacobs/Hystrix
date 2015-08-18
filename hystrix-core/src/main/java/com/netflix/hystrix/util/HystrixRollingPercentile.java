@@ -15,7 +15,7 @@
  */
 package com.netflix.hystrix.util;
 
-import org.HdrHistogram.Histogram;
+import com.netflix.hystrix.util.time.HystrixTime;
 import org.HdrHistogram.IntCountsHistogram;
 import org.HdrHistogram.Recorder;
 
@@ -98,7 +98,8 @@ public class HystrixRollingPercentile extends HystrixRollingMetrics<HystrixHisto
 
     }
 
-    /* package for testing */ HystrixRollingPercentile(HystrixRollingMetrics.Time time, int timeInMilliseconds, int numberOfBuckets, HystrixProperty<Boolean> enabled) {
+    //TODO was not public in 1.4, should not be public in 1.5
+    public HystrixRollingPercentile(HystrixTime time, int timeInMilliseconds, int numberOfBuckets, HystrixProperty<Boolean> enabled) {
         super(time, timeInMilliseconds, numberOfBuckets, enabled);
     }
 

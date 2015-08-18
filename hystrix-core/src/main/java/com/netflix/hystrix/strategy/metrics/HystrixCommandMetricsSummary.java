@@ -25,6 +25,8 @@ import com.netflix.hystrix.strategy.eventnotifier.HystrixEventNotifier;
 import com.netflix.hystrix.util.HystrixRollingNumber;
 import com.netflix.hystrix.util.HystrixRollingNumberEvent;
 import com.netflix.hystrix.util.HystrixRollingPercentile;
+import com.netflix.hystrix.util.time.HystrixActualTime;
+import com.netflix.hystrix.util.time.HystrixTime;
 
 /**
  * Used by {@link HystrixCommand} to record metrics into {@link HystrixRollingNumber} and {@link HystrixRollingPercentile} summary data structures.
@@ -35,11 +37,15 @@ public class HystrixCommandMetricsSummary extends HystrixCommandMetrics {
     private final HystrixRollingPercentile percentileExecution;
     private final HystrixRollingPercentile percentileTotal;
 
+    public HystrixCommandMetricsSummary(HystrixCommandKey key, HystrixCommandGroupKey commandGroup, HystrixThreadPoolKey threadPoolKey, HystrixCommandProperties properties, HystrixEventNotifier eventNotifier, HystrixTime time) {
+        super(key, commandGroup, threadPoolKey, properties, eventNotifier, time);
+        this.counter = new HystrixRollingNumber(time, properties.metricsRollingStatisticalWindowInMilliseconds().get(), properties.metricsRollingStatisticalWindowBuckets().get());
+        this.percentileExecution = new HystrixRollingPercentile(time, properties.metricsRollingPercentileWindowInMilliseconds().get(), properties.metricsRollingPercentileWindowBuckets().get(), properties.metricsRollingPercentileEnabled());
+        this.percentileTotal = new HystrixRollingPercentile(time, properties.metricsRollingPercentileWindowInMilliseconds().get(), properties.metricsRollingPercentileWindowBuckets().get(), properties.metricsRollingPercentileEnabled());
+    }
+
     public HystrixCommandMetricsSummary(HystrixCommandKey key, HystrixCommandGroupKey commandGroup, HystrixThreadPoolKey threadPoolKey, HystrixCommandProperties properties, HystrixEventNotifier eventNotifier) {
-        super(key, commandGroup, threadPoolKey, properties, eventNotifier);
-        this.counter = new HystrixRollingNumber(properties.metricsRollingStatisticalWindowInMilliseconds().get(), properties.metricsRollingStatisticalWindowBuckets().get());
-        this.percentileExecution = new HystrixRollingPercentile(properties.metricsRollingPercentileWindowInMilliseconds().get(), properties.metricsRollingPercentileWindowBuckets().get(), properties.metricsRollingPercentileBucketSize().get(), properties.metricsRollingPercentileEnabled());
-        this.percentileTotal = new HystrixRollingPercentile(properties.metricsRollingPercentileWindowInMilliseconds().get(), properties.metricsRollingPercentileWindowBuckets().get(), properties.metricsRollingPercentileBucketSize().get(), properties.metricsRollingPercentileEnabled());
+        this(key, commandGroup, threadPoolKey, properties, eventNotifier, HystrixActualTime.getInstance());
     }
 
     @Override

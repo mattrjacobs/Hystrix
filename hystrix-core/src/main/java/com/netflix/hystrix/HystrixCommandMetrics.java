@@ -28,6 +28,8 @@ import com.netflix.hystrix.exception.HystrixBadRequestException;
 import com.netflix.hystrix.strategy.HystrixPlugins;
 import com.netflix.hystrix.strategy.eventnotifier.HystrixEventNotifier;
 import com.netflix.hystrix.util.HystrixRollingNumberEvent;
+import com.netflix.hystrix.util.time.HystrixActualTime;
+import com.netflix.hystrix.util.time.HystrixTime;
 
 /**
  * Used by {@link HystrixCommand} to record metrics.
@@ -130,13 +132,20 @@ public abstract class HystrixCommandMetrics extends HystrixMetrics {
     private final HystrixCommandGroupKey group;
     private final HystrixThreadPoolKey threadPoolKey;
     private final HystrixEventNotifier eventNotifier;
+    protected final HystrixTime time;
 
-    protected HystrixCommandMetrics(HystrixCommandKey key, HystrixCommandGroupKey commandGroup, HystrixThreadPoolKey threadPoolKey, HystrixCommandProperties properties, HystrixEventNotifier eventNotifier) {
+    protected HystrixCommandMetrics(HystrixCommandKey key, HystrixCommandGroupKey commandGroup, HystrixThreadPoolKey threadPoolKey, HystrixCommandProperties properties, HystrixEventNotifier eventNotifier, HystrixTime time) {
         this.key = key;
         this.group = commandGroup;
         this.threadPoolKey = threadPoolKey;
         this.properties = properties;
         this.eventNotifier = eventNotifier;
+        this.time = time;
+    }
+
+
+    protected HystrixCommandMetrics(HystrixCommandKey key, HystrixCommandGroupKey commandGroup, HystrixThreadPoolKey threadPoolKey, HystrixCommandProperties properties, HystrixEventNotifier eventNotifier) {
+        this(key, commandGroup, threadPoolKey, properties, eventNotifier, HystrixActualTime.getInstance());
     }
 
     /**
@@ -405,12 +414,12 @@ public abstract class HystrixCommandMetrics extends HystrixMetrics {
 
     /* package */ void resetCounter() {
         clear();
-        lastHealthCountsSnapshot.set(System.currentTimeMillis());
+        lastHealthCountsSnapshot.set(time.getCurrentTimeInMillis());
         healthCountsSnapshot = new HealthCounts(0, 0, 0);
     }
 
     private volatile HealthCounts healthCountsSnapshot = new HealthCounts(0, 0, 0);
-    private volatile AtomicLong lastHealthCountsSnapshot = new AtomicLong(System.currentTimeMillis());
+    private volatile AtomicLong lastHealthCountsSnapshot = new AtomicLong(0);
 
     /**
      * Retrieve a snapshot of total requests, error count and error percentage.
@@ -425,7 +434,7 @@ public abstract class HystrixCommandMetrics extends HystrixMetrics {
         // we put an interval between snapshots so high-volume commands don't 
         // spend too much unnecessary time calculating metrics in very small time periods
         long lastTime = lastHealthCountsSnapshot.get();
-        long currentTime = System.currentTimeMillis();
+        long currentTime = time.getCurrentTimeInMillis();
         if (currentTime - lastTime >= properties.metricsHealthSnapshotIntervalInMilliseconds().get() || healthCountsSnapshot == null) {
             if (lastHealthCountsSnapshot.compareAndSet(lastTime, currentTime)) {
                 // our thread won setting the snapshot time so we will proceed with generating a new snapshot

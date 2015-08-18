@@ -20,6 +20,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 import com.netflix.hystrix.HystrixCommandMetrics.HealthCounts;
+import com.netflix.hystrix.util.time.HystrixActualTime;
+import com.netflix.hystrix.util.time.HystrixTime;
 
 /**
  * Circuit-breaker logic that is hooked into {@link HystrixCommand} execution and will stop allowing executions if failures have gone past the defined threshold.
@@ -124,6 +126,7 @@ public interface HystrixCircuitBreaker {
     /* package */static class HystrixCircuitBreakerImpl implements HystrixCircuitBreaker {
         private final HystrixCommandProperties properties;
         private final HystrixCommandMetrics metrics;
+        private final HystrixTime time;
 
         /* track whether this circuit is open/closed at any given point in time (default to false==closed) */
         private AtomicBoolean circuitOpen = new AtomicBoolean(false);
@@ -131,9 +134,14 @@ public interface HystrixCircuitBreaker {
         /* when the circuit was marked open or was last allowed to try a 'singleTest' */
         private AtomicLong circuitOpenedOrLastTestedTime = new AtomicLong();
 
-        protected HystrixCircuitBreakerImpl(HystrixCommandKey key, HystrixCommandGroupKey commandGroup, HystrixCommandProperties properties, HystrixCommandMetrics metrics) {
+        protected HystrixCircuitBreakerImpl(HystrixCommandKey key, HystrixCommandGroupKey commandGroup, HystrixCommandProperties properties, HystrixCommandMetrics metrics, HystrixTime time) {
             this.properties = properties;
             this.metrics = metrics;
+            this.time = time;
+        }
+
+        protected HystrixCircuitBreakerImpl(HystrixCommandKey key, HystrixCommandGroupKey commandGroup, HystrixCommandProperties properties, HystrixCommandMetrics metrics) {
+            this(key, commandGroup, properties, metrics, HystrixActualTime.getInstance());
         }
 
         public void markSuccess() {
@@ -164,10 +172,10 @@ public interface HystrixCircuitBreaker {
             long timeCircuitOpenedOrWasLastTested = circuitOpenedOrLastTestedTime.get();
             // 1) if the circuit is open
             // 2) and it's been longer than 'sleepWindow' since we opened the circuit
-            if (circuitOpen.get() && System.currentTimeMillis() > timeCircuitOpenedOrWasLastTested + properties.circuitBreakerSleepWindowInMilliseconds().get()) {
+            if (circuitOpen.get() && time.getCurrentTimeInMillis() > timeCircuitOpenedOrWasLastTested + properties.circuitBreakerSleepWindowInMilliseconds().get()) {
                 // We push the 'circuitOpenedTime' ahead by 'sleepWindow' since we have allowed one request to try.
                 // If it succeeds the circuit will be closed, otherwise another singleTest will be allowed at the end of the 'sleepWindow'.
-                if (circuitOpenedOrLastTestedTime.compareAndSet(timeCircuitOpenedOrWasLastTested, System.currentTimeMillis())) {
+                if (circuitOpenedOrLastTestedTime.compareAndSet(timeCircuitOpenedOrWasLastTested, time.getCurrentTimeInMillis())) {
                     // if this returns true that means we set the time so we'll return true to allow the singleTest
                     // if it returned false it means another thread raced us and allowed the singleTest before we did
                     return true;
@@ -198,7 +206,7 @@ public interface HystrixCircuitBreaker {
                 // our failure rate is too high, trip the circuit
                 if (circuitOpen.compareAndSet(false, true)) {
                     // if the previousValue was false then we want to set the currentTime
-                    circuitOpenedOrLastTestedTime.set(System.currentTimeMillis());
+                    circuitOpenedOrLastTestedTime.set(time.getCurrentTimeInMillis());
                     return true;
                 } else {
                     // How could previousValue be true? If another thread was going through this code at the same time a race-condition could have

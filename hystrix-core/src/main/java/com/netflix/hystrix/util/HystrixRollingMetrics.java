@@ -23,6 +23,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 import java.util.concurrent.locks.ReentrantLock;
 
+import com.netflix.hystrix.util.time.HystrixActualTime;
+import com.netflix.hystrix.util.time.HystrixTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,8 +44,8 @@ public abstract class HystrixRollingMetrics<B extends HystrixMetricsBucket> {
 
     protected static final Logger logger = LoggerFactory.getLogger(HystrixRollingMetrics.class);
 
-    private static final Time ACTUAL_TIME = new ActualTime();
-    protected final Time time;
+    private static final HystrixTime ACTUAL_TIME = HystrixActualTime.getInstance();
+    protected final HystrixTime time;
     /* package for testing */ final BucketCircularArray buckets;
     protected final int timeInMilliseconds;
     protected final int numberOfBuckets;
@@ -70,7 +72,7 @@ public abstract class HystrixRollingMetrics<B extends HystrixMetricsBucket> {
 
     }
 
-    /* package for testing */ HystrixRollingMetrics(Time time, int timeInMilliseconds, int numberOfBuckets, HystrixProperty<Boolean> enabled) {
+    /* package for testing */ HystrixRollingMetrics(HystrixTime time, int timeInMilliseconds, int numberOfBuckets, HystrixProperty<Boolean> enabled) {
         this.time = time;
         this.timeInMilliseconds = timeInMilliseconds;
         this.numberOfBuckets = numberOfBuckets;
@@ -407,18 +409,5 @@ public abstract class HystrixRollingMetrics<B extends HystrixMetricsBucket> {
         protected List<B> toList() {
             return state.get().toList();
         }
-    }
-
-    /* package for testing */ static interface Time {
-        public long getCurrentTimeInMillis();
-    }
-
-    protected static class ActualTime implements Time {
-
-        @Override
-        public long getCurrentTimeInMillis() {
-            return System.currentTimeMillis();
-        }
-
     }
 }

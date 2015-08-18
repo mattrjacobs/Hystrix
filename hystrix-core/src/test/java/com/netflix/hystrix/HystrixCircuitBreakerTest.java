@@ -22,6 +22,9 @@ import static org.junit.Assert.fail;
 import java.util.Random;
 
 import com.netflix.hystrix.strategy.metrics.HystrixCommandMetricsSummary;
+import com.netflix.hystrix.util.time.HystrixActualTime;
+import com.netflix.hystrix.util.time.HystrixMockedTime;
+import com.netflix.hystrix.util.time.HystrixTime;
 import org.junit.Ignore;
 import org.junit.Test;
 
@@ -43,8 +46,14 @@ public class HystrixCircuitBreakerTest {
         final HystrixCommandMetrics metrics;
         private boolean forceShortCircuit = false;
 
+
+        public TestCircuitBreaker(HystrixTime time) {
+            this.metrics = getMetrics(HystrixCommandPropertiesTest.getUnitTestPropertiesSetter(), time);
+            forceShortCircuit = false;
+        }
+
         public TestCircuitBreaker() {
-            this.metrics = getMetrics(HystrixCommandPropertiesTest.getUnitTestPropertiesSetter());
+            this.metrics = getMetrics(HystrixCommandPropertiesTest.getUnitTestPropertiesSetter(), HystrixActualTime.getInstance());
             forceShortCircuit = false;
         }
 
@@ -83,8 +92,9 @@ public class HystrixCircuitBreakerTest {
     @Test
     public void testTripCircuit() {
         try {
+            HystrixMockedTime time = new HystrixMockedTime();
             HystrixCommandProperties.Setter properties = HystrixCommandPropertiesTest.getUnitTestPropertiesSetter();
-            HystrixCommandMetrics metrics = getMetrics(properties);
+            HystrixCommandMetrics metrics = getMetrics(properties, time);
             HystrixCircuitBreaker cb = getCircuitBreaker(key, CommandOwnerForUnitTest.OWNER_TWO, metrics, properties);
 
             metrics.markSuccess(1000);
@@ -102,7 +112,7 @@ public class HystrixCircuitBreakerTest {
             metrics.markFailure(1000);
             metrics.markFailure(1000);
 
-            Thread.sleep(1000);
+            time.increment(2000);
 
             // everything has failed in the test window so we should return false now
             assertFalse(cb.allowRequest());
@@ -504,8 +514,15 @@ public class HystrixCircuitBreakerTest {
     /**
      * Utility method for creating {@link HystrixCommandMetrics} for unit tests.
      */
+    private static HystrixCommandMetrics getMetrics(HystrixCommandProperties.Setter properties, HystrixTime time) {
+        return new HystrixCommandMetricsSummary(CommandKeyForUnitTest.KEY_ONE, CommandOwnerForUnitTest.OWNER_ONE, ThreadPoolKeyForUnitTest.THREAD_POOL_ONE, HystrixCommandPropertiesTest.asMock(properties), HystrixEventNotifierDefault.getInstance(), time);
+    }
+
+    /**
+     * Utility method for creating {@link HystrixCommandMetrics} for unit tests.
+     */
     private static HystrixCommandMetrics getMetrics(HystrixCommandProperties.Setter properties) {
-        return new HystrixCommandMetricsSummary(CommandKeyForUnitTest.KEY_ONE, CommandOwnerForUnitTest.OWNER_ONE, ThreadPoolKeyForUnitTest.THREAD_POOL_ONE, HystrixCommandPropertiesTest.asMock(properties), HystrixEventNotifierDefault.getInstance());
+        return new HystrixCommandMetricsSummary(CommandKeyForUnitTest.KEY_ONE, CommandOwnerForUnitTest.OWNER_ONE, ThreadPoolKeyForUnitTest.THREAD_POOL_ONE, HystrixCommandPropertiesTest.asMock(properties), HystrixEventNotifierDefault.getInstance(), HystrixActualTime.getInstance());
     }
 
     /**
