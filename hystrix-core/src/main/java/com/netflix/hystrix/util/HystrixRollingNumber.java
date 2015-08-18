@@ -325,7 +325,9 @@ public class HystrixRollingNumber extends HystrixRollingMetrics<HystrixCountersB
     protected void rollInternalDataStructures(BucketCircularArray buckets, HystrixCountersBucket lastFullBucket) {
         // we created a new bucket so let's re-generate the CounterSnapshot (not including the new bucket)
         currentCounterSnapshot = new CounterSnapshot(buckets);
-        cumulativeCounterSnapshot.add(lastFullBucket);
+        if (lastFullBucket != null) {
+            cumulativeCounterSnapshot.add(lastFullBucket);
+        }
         for (HystrixRollingNumberEvent eventType: HystrixRollingNumberEvent.values()) {
             if (eventType.isMaxUpdater()) {
                 DistributionSnapshot newDistributionSnapshot = new DistributionSnapshot(buckets, eventType);

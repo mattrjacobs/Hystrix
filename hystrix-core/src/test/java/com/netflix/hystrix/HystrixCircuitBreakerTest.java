@@ -85,6 +85,10 @@ public class HystrixCircuitBreakerTest {
 
     private HystrixCommandKey key = CommandKeyForUnitTest.KEY_ONE;
 
+    private static int getBucketSizeInMilliseconds(HystrixCommandProperties.Setter properties) {
+        return properties.getMetricsRollingStatisticalWindowInMilliseconds() / properties.getMetricsRollingStatisticalWindowBuckets();
+    }
+
     /**
      * Test that if all 'marks' are successes during the test window that it does NOT trip the circuit.
      * Test that if all 'marks' are failures during the test window that it trips the circuit.
@@ -95,12 +99,14 @@ public class HystrixCircuitBreakerTest {
             HystrixMockedTime time = new HystrixMockedTime();
             HystrixCommandProperties.Setter properties = HystrixCommandPropertiesTest.getUnitTestPropertiesSetter();
             HystrixCommandMetrics metrics = getMetrics(properties, time);
-            HystrixCircuitBreaker cb = getCircuitBreaker(key, CommandOwnerForUnitTest.OWNER_TWO, metrics, properties);
+            HystrixCircuitBreaker cb = getCircuitBreaker(key, CommandOwnerForUnitTest.OWNER_TWO, metrics, properties, time);
 
             metrics.markSuccess(1000);
             metrics.markSuccess(1000);
             metrics.markSuccess(1000);
             metrics.markSuccess(1000);
+
+            time.increment(getBucketSizeInMilliseconds(properties));
 
             // this should still allow requests as everything has been successful
             assertTrue(cb.allowRequest());
@@ -112,7 +118,7 @@ public class HystrixCircuitBreakerTest {
             metrics.markFailure(1000);
             metrics.markFailure(1000);
 
-            time.increment(2000);
+            time.increment(getBucketSizeInMilliseconds(properties));
 
             // everything has failed in the test window so we should return false now
             assertFalse(cb.allowRequest());
@@ -129,8 +135,9 @@ public class HystrixCircuitBreakerTest {
     @Test
     public void testTripCircuitOnFailuresAboveThreshold() {
         try {
+            HystrixMockedTime time = new HystrixMockedTime();
             HystrixCommandProperties.Setter properties = HystrixCommandPropertiesTest.getUnitTestPropertiesSetter();
-            HystrixCommandMetrics metrics = getMetrics(properties);
+            HystrixCommandMetrics metrics = getMetrics(properties, time);
             HystrixCircuitBreaker cb = getCircuitBreaker(key, CommandOwnerForUnitTest.OWNER_TWO, metrics, properties);
 
             // this should start as allowing requests
@@ -148,7 +155,7 @@ public class HystrixCircuitBreakerTest {
             metrics.markFailure(10);
             metrics.markFailure(10);
 
-            Thread.sleep(1000);
+            time.increment(getBucketSizeInMilliseconds(properties));
 
             // this should trip the circuit as the error percentage is above the threshold
             assertFalse(cb.allowRequest());
@@ -165,9 +172,10 @@ public class HystrixCircuitBreakerTest {
     @Test
     public void testCircuitDoesNotTripOnFailuresBelowThreshold() {
         try {
+            HystrixMockedTime time = new HystrixMockedTime();
             HystrixCommandProperties.Setter properties = HystrixCommandPropertiesTest.getUnitTestPropertiesSetter();
-            HystrixCommandMetrics metrics = getMetrics(properties);
-            HystrixCircuitBreaker cb = getCircuitBreaker(key, CommandOwnerForUnitTest.OWNER_TWO, metrics, properties);
+            HystrixCommandMetrics metrics = getMetrics(properties, time);
+            HystrixCircuitBreaker cb = getCircuitBreaker(key, CommandOwnerForUnitTest.OWNER_TWO, metrics, properties, time);
 
             // this should start as allowing requests
             assertTrue(cb.allowRequest());
@@ -183,7 +191,7 @@ public class HystrixCircuitBreakerTest {
             metrics.markFailure(10);
             metrics.markFailure(10);
 
-            Thread.sleep(1000);
+            time.increment(getBucketSizeInMilliseconds(properties));
 
             // this should remain open as the failure threshold is below the percentage limit
             assertTrue(cb.allowRequest());
@@ -200,9 +208,10 @@ public class HystrixCircuitBreakerTest {
     @Test
     public void testTripCircuitOnTimeouts() {
         try {
+            HystrixMockedTime time = new HystrixMockedTime();
             HystrixCommandProperties.Setter properties = HystrixCommandPropertiesTest.getUnitTestPropertiesSetter();
-            HystrixCommandMetrics metrics = getMetrics(properties);
-            HystrixCircuitBreaker cb = getCircuitBreaker(key, CommandOwnerForUnitTest.OWNER_TWO, metrics, properties);
+            HystrixCommandMetrics metrics = getMetrics(properties, time);
+            HystrixCircuitBreaker cb = getCircuitBreaker(key, CommandOwnerForUnitTest.OWNER_TWO, metrics, properties, time);
 
             // this should start as allowing requests
             assertTrue(cb.allowRequest());
@@ -214,7 +223,7 @@ public class HystrixCircuitBreakerTest {
             metrics.markTimeout(2000);
             metrics.markTimeout(2000);
 
-            Thread.sleep(1000);
+            time.increment(getBucketSizeInMilliseconds(properties));
 
             // everything has been a timeout so we should not allow any requests
             assertFalse(cb.allowRequest());
@@ -231,9 +240,10 @@ public class HystrixCircuitBreakerTest {
     @Test
     public void testTripCircuitOnTimeoutsAboveThreshold() {
         try {
+            HystrixMockedTime time = new HystrixMockedTime();
             HystrixCommandProperties.Setter properties = HystrixCommandPropertiesTest.getUnitTestPropertiesSetter();
-            HystrixCommandMetrics metrics = getMetrics(properties);
-            HystrixCircuitBreaker cb = getCircuitBreaker(key, CommandOwnerForUnitTest.OWNER_TWO, metrics, properties);
+            HystrixCommandMetrics metrics = getMetrics(properties, time);
+            HystrixCircuitBreaker cb = getCircuitBreaker(key, CommandOwnerForUnitTest.OWNER_TWO, metrics, properties, time);
 
             // this should start as allowing requests
             assertTrue(cb.allowRequest());
@@ -250,7 +260,7 @@ public class HystrixCircuitBreakerTest {
             metrics.markTimeout(10);
             metrics.markTimeout(10);
 
-            Thread.sleep(1000);
+            time.increment(getBucketSizeInMilliseconds(properties));
 
             // this should trip the circuit as the error percentage is above the threshold
             assertFalse(cb.allowRequest());
@@ -267,10 +277,11 @@ public class HystrixCircuitBreakerTest {
     @Test
     public void testSingleTestOnOpenCircuitAfterTimeWindow() {
         try {
+            HystrixMockedTime time = new HystrixMockedTime();
             int sleepWindow = 200;
             HystrixCommandProperties.Setter properties = HystrixCommandPropertiesTest.getUnitTestPropertiesSetter().withCircuitBreakerSleepWindowInMilliseconds(sleepWindow);
-            HystrixCommandMetrics metrics = getMetrics(properties);
-            HystrixCircuitBreaker cb = getCircuitBreaker(key, CommandOwnerForUnitTest.OWNER_TWO, metrics, properties);
+            HystrixCommandMetrics metrics = getMetrics(properties, time);
+            HystrixCircuitBreaker cb = getCircuitBreaker(key, CommandOwnerForUnitTest.OWNER_TWO, metrics, properties, time);
 
             // fail
             metrics.markFailure(1000);
@@ -278,12 +289,14 @@ public class HystrixCircuitBreakerTest {
             metrics.markFailure(1000);
             metrics.markFailure(1000);
 
+            time.increment(getBucketSizeInMilliseconds(properties));
+
             // everything has failed in the test window so we should return false now
             assertFalse(cb.allowRequest());
             assertTrue(cb.isOpen());
 
             // wait for sleepWindow to pass
-            Thread.sleep(sleepWindow + 50);
+            time.increment(sleepWindow + 50);
 
             // we should now allow 1 request
             assertTrue(cb.allowRequest());
@@ -304,10 +317,11 @@ public class HystrixCircuitBreakerTest {
     @Test
     public void testCircuitClosedAfterSuccess() {
         try {
+            HystrixMockedTime time = new HystrixMockedTime();
             int sleepWindow = 200;
             HystrixCommandProperties.Setter properties = HystrixCommandPropertiesTest.getUnitTestPropertiesSetter().withCircuitBreakerSleepWindowInMilliseconds(sleepWindow);
-            HystrixCommandMetrics metrics = getMetrics(properties);
-            HystrixCircuitBreaker cb = getCircuitBreaker(key, CommandOwnerForUnitTest.OWNER_TWO, metrics, properties);
+            HystrixCommandMetrics metrics = getMetrics(properties, time);
+            HystrixCircuitBreaker cb = getCircuitBreaker(key, CommandOwnerForUnitTest.OWNER_TWO, metrics, properties, time);
 
             // fail
             metrics.markFailure(1000);
@@ -315,12 +329,14 @@ public class HystrixCircuitBreakerTest {
             metrics.markFailure(1000);
             metrics.markTimeout(1000);
 
+            time.increment(getBucketSizeInMilliseconds(properties));
+
             // everything has failed in the test window so we should return false now
             assertFalse(cb.allowRequest());
             assertTrue(cb.isOpen());
 
             // wait for sleepWindow to pass
-            Thread.sleep(sleepWindow + 50);
+            time.increment(sleepWindow + 50);
 
             // we should now allow 1 request
             assertTrue(cb.allowRequest());
@@ -354,11 +370,12 @@ public class HystrixCircuitBreakerTest {
     @Test
     public void testCircuitClosedAfterSuccessAndClearsStatisticalWindow() {
         try {
+            HystrixMockedTime time = new HystrixMockedTime();
             int statisticalWindow = 200;
             int sleepWindow = 10; // this is set very low so that returning from a retry still ends up having data in the buckets for the statisticalWindow
             HystrixCommandProperties.Setter properties = HystrixCommandPropertiesTest.getUnitTestPropertiesSetter().withCircuitBreakerSleepWindowInMilliseconds(sleepWindow).withMetricsRollingStatisticalWindowInMilliseconds(statisticalWindow);
-            HystrixCommandMetrics metrics = getMetrics(properties);
-            HystrixCircuitBreaker cb = getCircuitBreaker(key, CommandOwnerForUnitTest.OWNER_TWO, metrics, properties);
+            HystrixCommandMetrics metrics = getMetrics(properties, time);
+            HystrixCircuitBreaker cb = getCircuitBreaker(key, CommandOwnerForUnitTest.OWNER_TWO, metrics, properties, time);
 
             // fail
             metrics.markFailure(1000);
@@ -366,12 +383,14 @@ public class HystrixCircuitBreakerTest {
             metrics.markFailure(1000);
             metrics.markFailure(1000);
 
+            time.increment(getBucketSizeInMilliseconds(properties));
+
             // everything has failed in the test window so we should return false now
             assertFalse(cb.allowRequest());
             assertTrue(cb.isOpen());
 
             // wait for sleepWindow to pass
-            Thread.sleep(sleepWindow + 50);
+            time.increment(sleepWindow + 50);
 
             // we should now allow 1 request
             assertTrue(cb.allowRequest());
@@ -405,10 +424,11 @@ public class HystrixCircuitBreakerTest {
     @Test
     public void testMultipleTimeWindowRetriesBeforeClosingCircuit() {
         try {
+            HystrixMockedTime time = new HystrixMockedTime();
             int sleepWindow = 200;
             HystrixCommandProperties.Setter properties = HystrixCommandPropertiesTest.getUnitTestPropertiesSetter().withCircuitBreakerSleepWindowInMilliseconds(sleepWindow);
-            HystrixCommandMetrics metrics = getMetrics(properties);
-            HystrixCircuitBreaker cb = getCircuitBreaker(key, CommandOwnerForUnitTest.OWNER_TWO, metrics, properties);
+            HystrixCommandMetrics metrics = getMetrics(properties, time);
+            HystrixCircuitBreaker cb = getCircuitBreaker(key, CommandOwnerForUnitTest.OWNER_TWO, metrics, properties, time);
 
             // fail
             metrics.markFailure(1000);
@@ -416,12 +436,14 @@ public class HystrixCircuitBreakerTest {
             metrics.markFailure(1000);
             metrics.markFailure(1000);
 
+            time.increment(getBucketSizeInMilliseconds(properties));
+
             // everything has failed in the test window so we should return false now
             assertFalse(cb.allowRequest());
             assertTrue(cb.isOpen());
 
             // wait for sleepWindow to pass
-            Thread.sleep(sleepWindow + 50);
+            time.increment(sleepWindow + 50);
 
             // we should now allow 1 request
             assertTrue(cb.allowRequest());
@@ -438,7 +460,7 @@ public class HystrixCircuitBreakerTest {
             assertFalse(cb.allowRequest());
 
             // wait for sleepWindow to pass
-            Thread.sleep(sleepWindow + 50);
+            time.increment(sleepWindow + 50);
 
             // we should now allow 1 request
             assertTrue(cb.allowRequest());
@@ -455,7 +477,7 @@ public class HystrixCircuitBreakerTest {
             assertFalse(cb.allowRequest());
 
             // wait for sleepWindow to pass
-            Thread.sleep(sleepWindow + 50);
+            time.increment(sleepWindow + 50);
 
             // we should now allow 1 request
             assertTrue(cb.allowRequest());
@@ -488,18 +510,21 @@ public class HystrixCircuitBreakerTest {
     @Test
     public void testLowVolumeDoesNotTripCircuit() {
         try {
+            HystrixMockedTime time = new HystrixMockedTime();
             int sleepWindow = 200;
             int lowVolume = 5;
 
             HystrixCommandProperties.Setter properties = HystrixCommandPropertiesTest.getUnitTestPropertiesSetter().withCircuitBreakerSleepWindowInMilliseconds(sleepWindow).withCircuitBreakerRequestVolumeThreshold(lowVolume);
-            HystrixCommandMetrics metrics = getMetrics(properties);
-            HystrixCircuitBreaker cb = getCircuitBreaker(key, CommandOwnerForUnitTest.OWNER_TWO, metrics, properties);
+            HystrixCommandMetrics metrics = getMetrics(properties, time);
+            HystrixCircuitBreaker cb = getCircuitBreaker(key, CommandOwnerForUnitTest.OWNER_TWO, metrics, properties, time);
 
             // fail
             metrics.markFailure(1000);
             metrics.markFailure(1000);
             metrics.markFailure(1000);
             metrics.markFailure(1000);
+
+            time.increment(getBucketSizeInMilliseconds(properties));
 
             // even though it has all failed we won't trip the circuit because the volume is low
             assertTrue(cb.allowRequest());
@@ -512,7 +537,7 @@ public class HystrixCircuitBreakerTest {
     }
 
     /**
-     * Utility method for creating {@link HystrixCommandMetrics} for unit tests.
+     * Utility method for creating {@link HystrixCommandMetrics} for unit tests with an arbitrary time source.
      */
     private static HystrixCommandMetrics getMetrics(HystrixCommandProperties.Setter properties, HystrixTime time) {
         return new HystrixCommandMetricsSummary(CommandKeyForUnitTest.KEY_ONE, CommandOwnerForUnitTest.OWNER_ONE, ThreadPoolKeyForUnitTest.THREAD_POOL_ONE, HystrixCommandPropertiesTest.asMock(properties), HystrixEventNotifierDefault.getInstance(), time);
@@ -526,10 +551,17 @@ public class HystrixCircuitBreakerTest {
     }
 
     /**
+     * Utility method for creating {@link HystrixCircuitBreaker} for unit tests with an arbitrary time source.
+     */
+    private static HystrixCircuitBreaker getCircuitBreaker(HystrixCommandKey key, HystrixCommandGroupKey commandGroup, HystrixCommandMetrics metrics, HystrixCommandProperties.Setter properties, HystrixTime time) {
+        return new HystrixCircuitBreakerImpl(key, commandGroup, HystrixCommandPropertiesTest.asMock(properties), metrics, time);
+    }
+
+    /**
      * Utility method for creating {@link HystrixCircuitBreaker} for unit tests.
      */
     private static HystrixCircuitBreaker getCircuitBreaker(HystrixCommandKey key, HystrixCommandGroupKey commandGroup, HystrixCommandMetrics metrics, HystrixCommandProperties.Setter properties) {
-        return new HystrixCircuitBreakerImpl(key, commandGroup, HystrixCommandPropertiesTest.asMock(properties), metrics);
+        return new HystrixCircuitBreakerImpl(key, commandGroup, HystrixCommandPropertiesTest.asMock(properties), metrics, HystrixActualTime.getInstance());
     }
 
     private static enum CommandOwnerForUnitTest implements HystrixCommandGroupKey {
@@ -564,7 +596,7 @@ public class HystrixCircuitBreakerTest {
         Random rnd = new Random();
 
         for (int i = 0; i < totalNumCalls; i++) {
-            //System.out.println(i);
+            System.out.println(i);
 
             try {
                 boolean err = rnd.nextFloat() * 100 < errPerc;
@@ -573,7 +605,7 @@ public class HystrixCircuitBreakerTest {
                 cmd.execute();
 
             } catch (Exception e) {
-                //System.err.println(e.getMessage());
+                System.err.println(e.getMessage());
             }
 
             try {
@@ -617,14 +649,10 @@ public class HystrixCircuitBreakerTest {
     public class MyHystrixCommandExecutionHook extends HystrixCommandExecutionHook {
 
         @Override
-        public <T> T onComplete(final HystrixInvokable<T> command, final T response) {
-
-            logHC(command, response);
-
-            return super.onComplete(command, response);
+        public <T> T onEmit(HystrixInvokable<T> commandInstance, T value) {
+            logHC(commandInstance, value);
+            return super.onEmit(commandInstance, value);
         }
-
-        private int counter = 0;
 
         private <T> void logHC(HystrixInvokable<T> command, T response) {
 

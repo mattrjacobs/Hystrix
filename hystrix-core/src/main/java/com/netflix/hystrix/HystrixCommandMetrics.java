@@ -413,6 +413,7 @@ public abstract class HystrixCommandMetrics extends HystrixMetrics {
     protected abstract void clear();
 
     /* package */ void resetCounter() {
+        System.out.println("resetCounter was called!");
         clear();
         lastHealthCountsSnapshot.set(time.getCurrentTimeInMillis());
         healthCountsSnapshot = new HealthCounts(0, 0, 0);

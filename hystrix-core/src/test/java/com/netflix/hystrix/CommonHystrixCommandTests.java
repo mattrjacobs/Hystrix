@@ -23,6 +23,8 @@ import com.netflix.hystrix.exception.HystrixBadRequestException;
 import com.netflix.hystrix.strategy.HystrixPlugins;
 import com.netflix.hystrix.strategy.concurrency.HystrixContextScheduler;
 import com.netflix.hystrix.strategy.properties.HystrixProperty;
+import com.netflix.hystrix.util.time.HystrixActualTime;
+import com.netflix.hystrix.util.time.HystrixTime;
 import org.junit.Test;
 import rx.Observable;
 import rx.Scheduler;
@@ -1442,13 +1444,23 @@ public abstract class CommonHystrixCommandTests<C extends AbstractTestHystrixCom
      * {@link HystrixCommandTest} and {@link HystrixObservableCommandTest} should each provide concrete impls for
      * {@link HystrixCommand}s and {@link} HystrixObservableCommand}s, respectively.
      */
-
+    //TODO replace this with a fluent builder
     C getCommand(ExecutionIsolationStrategy isolationStrategy, ExecutionResult executionResult) {
         return getCommand(isolationStrategy, executionResult, FallbackResult.UNIMPLEMENTED);
     }
 
+    C getCommand(ExecutionIsolationStrategy isolationStrategy, ExecutionResult executionResult, HystrixTime time) {
+        HystrixCircuitBreakerTest.TestCircuitBreaker cb = new HystrixCircuitBreakerTest.TestCircuitBreaker(time);
+        return getCommand(isolationStrategy, executionResult, 0, FallbackResult.UNIMPLEMENTED, 0, cb, null, 100, CacheEnabled.NO, "foo", 10, 10);
+    }
+
     C getCommand(ExecutionIsolationStrategy isolationStrategy, ExecutionResult executionResult, FallbackResult fallbackResult) {
         return getCommand(isolationStrategy, executionResult, 0, fallbackResult);
+    }
+
+    C getCommand(ExecutionIsolationStrategy isolationStrategy, ExecutionResult executionResult, FallbackResult fallbackResult, HystrixTime time) {
+        HystrixCircuitBreakerTest.TestCircuitBreaker cb = new HystrixCircuitBreakerTest.TestCircuitBreaker(time);
+        return getCommand(isolationStrategy, executionResult, 0, fallbackResult, 0, cb, null, 100, CacheEnabled.NO, "foo", 10, 10);
     }
 
     C getCommand(ExecutionIsolationStrategy isolationStrategy, ExecutionResult executionResult, int executionLatency, FallbackResult fallbackResult) {
@@ -1457,6 +1469,10 @@ public abstract class CommonHystrixCommandTests<C extends AbstractTestHystrixCom
 
     C getCommand(ExecutionIsolationStrategy isolationStrategy, ExecutionResult executionResult, int executionLatency, FallbackResult fallbackResult, int timeout) {
         return getCommand(isolationStrategy, executionResult, executionLatency, fallbackResult, 0, new HystrixCircuitBreakerTest.TestCircuitBreaker(), null, timeout, CacheEnabled.NO, "foo", 10, 10);
+    }
+
+    C getCommand(ExecutionIsolationStrategy isolationStrategy, ExecutionResult executionResult, int executionLatency, FallbackResult fallbackResult, int timeout, HystrixTime time) {
+        return getCommand(isolationStrategy, executionResult, executionLatency, fallbackResult, 0, new HystrixCircuitBreakerTest.TestCircuitBreaker(time), null, timeout, CacheEnabled.NO, "foo", 10, 10);
     }
 
     C getCommand(ExecutionIsolationStrategy isolationStrategy, ExecutionResult executionResult, int executionLatency, FallbackResult fallbackResult, int fallbackLatency, HystrixCircuitBreakerTest.TestCircuitBreaker circuitBreaker, HystrixThreadPool threadPool, int timeout, CacheEnabled cacheEnabled, Object value, int executionSemaphoreCount, int fallbackSemaphoreCount) {
@@ -1478,6 +1494,10 @@ public abstract class CommonHystrixCommandTests<C extends AbstractTestHystrixCom
 
     C getLatentCommand(ExecutionIsolationStrategy isolationStrategy, ExecutionResult executionResult, int executionLatency, FallbackResult fallbackResult, int timeout) {
         return getCommand(isolationStrategy, executionResult, executionLatency, fallbackResult, 0, new HystrixCircuitBreakerTest.TestCircuitBreaker(), null, timeout, CacheEnabled.NO, "foo", 10, 10);
+    }
+
+    C getLatentCommand(ExecutionIsolationStrategy isolationStrategy, ExecutionResult executionResult, int executionLatency, FallbackResult fallbackResult, int timeout, HystrixTime time) {
+        return getCommand(isolationStrategy, executionResult, executionLatency, fallbackResult, 0, new HystrixCircuitBreakerTest.TestCircuitBreaker(time), null, timeout, CacheEnabled.NO, "foo", 10, 10);
     }
 
     C getLatentCommand(ExecutionIsolationStrategy isolationStrategy, ExecutionResult executionResult, int executionLatency, FallbackResult fallbackResult, HystrixCircuitBreakerTest.TestCircuitBreaker circuitBreaker, HystrixThreadPool threadPool, int timeout) {
@@ -1510,11 +1530,25 @@ public abstract class CommonHystrixCommandTests<C extends AbstractTestHystrixCom
         return getCommand(isolationStrategy, executionResult, 0, FallbackResult.UNIMPLEMENTED, 0, new HystrixCircuitBreakerTest.TestCircuitBreaker(), null, 100, CacheEnabled.NO, "foo", 10, 10, true);
     }
 
+    C getCircuitBreakerDisabledCommand(ExecutionIsolationStrategy isolationStrategy, ExecutionResult executionResult, HystrixTime time) {
+        return getCommand(isolationStrategy, executionResult, 0, FallbackResult.UNIMPLEMENTED, 0, new HystrixCircuitBreakerTest.TestCircuitBreaker(time), null, 100, CacheEnabled.NO, "foo", 10, 10, true);
+    }
+
     C getRecoverableErrorCommand(ExecutionIsolationStrategy isolationStrategy, FallbackResult fallbackResult) {
         return getCommand(isolationStrategy, ExecutionResult.RECOVERABLE_ERROR, 0, fallbackResult);
     }
 
+    C getRecoverableErrorCommand(ExecutionIsolationStrategy isolationStrategy, FallbackResult fallbackResult, HystrixTime time) {
+        HystrixCircuitBreakerTest.TestCircuitBreaker cb = new HystrixCircuitBreakerTest.TestCircuitBreaker(time);
+        return getCommand(isolationStrategy, ExecutionResult.RECOVERABLE_ERROR, 0, fallbackResult, 0, cb, null, 100, CacheEnabled.NO, "foo", 10, 10);
+    }
+
     C getUnrecoverableErrorCommand(ExecutionIsolationStrategy isolationStrategy, FallbackResult fallbackResult) {
         return getCommand(isolationStrategy, ExecutionResult.UNRECOVERABLE_ERROR, 0, fallbackResult);
+    }
+
+    C getUnrecoverableErrorCommand(ExecutionIsolationStrategy isolationStrategy, FallbackResult fallbackResult, HystrixTime time) {
+        HystrixCircuitBreakerTest.TestCircuitBreaker cb = new HystrixCircuitBreakerTest.TestCircuitBreaker(time);
+        return getCommand(isolationStrategy, ExecutionResult.UNRECOVERABLE_ERROR, 0, fallbackResult, 0, cb, null, 100, CacheEnabled.NO, "foo", 10, 10);
     }
 }

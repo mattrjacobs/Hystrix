@@ -37,6 +37,7 @@ public class HystrixCommandMetricsSummary extends HystrixCommandMetrics {
     private final HystrixRollingPercentile percentileExecution;
     private final HystrixRollingPercentile percentileTotal;
 
+    //TODO was not public in 1.4, should not be public in 1.5
     public HystrixCommandMetricsSummary(HystrixCommandKey key, HystrixCommandGroupKey commandGroup, HystrixThreadPoolKey threadPoolKey, HystrixCommandProperties properties, HystrixEventNotifier eventNotifier, HystrixTime time) {
         super(key, commandGroup, threadPoolKey, properties, eventNotifier, time);
         this.counter = new HystrixRollingNumber(time, properties.metricsRollingStatisticalWindowInMilliseconds().get(), properties.metricsRollingStatisticalWindowBuckets().get());

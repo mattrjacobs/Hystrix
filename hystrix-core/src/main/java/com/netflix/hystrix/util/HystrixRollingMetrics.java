@@ -217,6 +217,8 @@ public abstract class HystrixRollingMetrics<B extends HystrixMetricsBucket> {
 
         // clear buckets so we start over again
         buckets.clear();
+        rollInternalDataStructures(buckets, null);
+
     }
 
     /**
