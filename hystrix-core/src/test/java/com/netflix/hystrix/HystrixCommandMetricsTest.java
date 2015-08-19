@@ -19,6 +19,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
 import com.netflix.hystrix.strategy.metrics.HystrixCommandMetricsSummary;
+import com.netflix.hystrix.util.time.HystrixMockedTime;
+import com.netflix.hystrix.util.time.HystrixTime;
 import org.junit.Test;
 
 import com.netflix.hystrix.strategy.eventnotifier.HystrixEventNotifierDefault;
@@ -34,20 +36,22 @@ public class HystrixCommandMetricsTest {
 
         try {
             HystrixCommandProperties.Setter properties = HystrixCommandPropertiesTest.getUnitTestPropertiesSetter();
-            HystrixCommandMetrics metrics = getMetrics(properties);
+            HystrixMockedTime time = new HystrixMockedTime();
+            HystrixCommandMetrics metrics = getMetrics(properties, time);
 
             metrics.markSuccess(100);
-            assertEquals(0, metrics.getHealthCounts().getErrorPercentage());
-
             metrics.markFailure(1000);
+            time.increment(1000);
             assertEquals(50, metrics.getHealthCounts().getErrorPercentage());
 
             metrics.markSuccess(100);
             metrics.markSuccess(100);
+            time.increment(1000);
             assertEquals(25, metrics.getHealthCounts().getErrorPercentage());
 
             metrics.markTimeout(5000);
             metrics.markTimeout(5000);
+            time.increment(1000);
             assertEquals(50, metrics.getHealthCounts().getErrorPercentage());
 
             metrics.markSuccess(100);
@@ -60,6 +64,7 @@ public class HystrixCommandMetricsTest {
             // 6 success + 1 latent success + 1 failure + 2 timeout = 10 total
             // latent success not considered error
             // error percentage = 1 failure + 2 timeout / 10
+            time.increment(1000);
             assertEquals(30, metrics.getHealthCounts().getErrorPercentage());
 
         } catch (Exception e) {
@@ -72,20 +77,25 @@ public class HystrixCommandMetricsTest {
     @Test
     public void testBadRequestsDoNotAffectErrorPercentage() {
         HystrixCommandProperties.Setter properties = HystrixCommandPropertiesTest.getUnitTestPropertiesSetter();
-        HystrixCommandMetrics metrics = getMetrics(properties);
+        HystrixMockedTime time = new HystrixMockedTime();
+        HystrixCommandMetrics metrics = getMetrics(properties, time);
 
         metrics.markSuccess(100);
+        time.increment(1000);
         assertEquals(0, metrics.getHealthCounts().getErrorPercentage());
 
         metrics.markFailure(1000);
+        time.increment(1000);
         assertEquals(50, metrics.getHealthCounts().getErrorPercentage());
 
         metrics.markBadRequest(1);
         metrics.markBadRequest(2);
+        time.increment(1000);
         assertEquals(50, metrics.getHealthCounts().getErrorPercentage());
 
         metrics.markFailure(45);
         metrics.markFailure(55);
+        time.increment(1000);
         assertEquals(75, metrics.getHealthCounts().getErrorPercentage());
     }
 
@@ -129,8 +139,12 @@ public class HystrixCommandMetricsTest {
     /**
      * Utility method for creating {@link HystrixCommandMetrics} for unit tests.
      */
-    private static HystrixCommandMetrics getMetrics(HystrixCommandProperties.Setter properties) {
-        return new HystrixCommandMetricsSummary(InspectableBuilder.CommandKeyForUnitTest.KEY_ONE, InspectableBuilder.CommandGroupForUnitTest.OWNER_ONE, InspectableBuilder.ThreadPoolKeyForUnitTest.THREAD_POOL_ONE, HystrixCommandPropertiesTest.asMock(properties), HystrixEventNotifierDefault.getInstance());
+    private static HystrixCommandMetrics getMetrics(HystrixCommandProperties.Setter properties, HystrixTime time) {
+        return new HystrixCommandMetricsSummary(InspectableBuilder.CommandKeyForUnitTest.KEY_ONE,
+                InspectableBuilder.CommandGroupForUnitTest.OWNER_ONE,
+                InspectableBuilder.ThreadPoolKeyForUnitTest.THREAD_POOL_ONE,
+                HystrixCommandPropertiesTest.asMock(properties),
+                HystrixEventNotifierDefault.getInstance(),
+                time);
     }
-
 }

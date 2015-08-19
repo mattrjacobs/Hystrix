@@ -26,8 +26,11 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.netflix.hystrix.strategy.metrics.HystrixCollapserMetricsSummary;
 import com.netflix.hystrix.strategy.properties.HystrixPropertiesCollapserDefault;
 import com.netflix.hystrix.util.HystrixRollingNumberEvent;
+import com.netflix.hystrix.util.time.HystrixMockedTime;
+import com.netflix.hystrix.util.time.HystrixTime;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -66,7 +69,8 @@ public class HystrixCollapserTest {
 
     @Test
     public void testTwoRequests() throws Exception {
-        TestCollapserTimer timer = new TestCollapserTimer();
+        HystrixMockedTime time = new HystrixMockedTime();
+        TestCollapserTimer timer = new TestCollapserTimer(time);
         HystrixCollapser<List<String>, String, String> collapser1 = new TestRequestCollapser(timer, 1);
         Future<String> response1 = collapser1.queue();
         HystrixCollapser<List<String>, String, String> collapser2 = new TestRequestCollapser(timer, 2);
@@ -80,6 +84,8 @@ public class HystrixCollapserTest {
 
         HystrixCollapserMetrics metrics = collapser1.getMetrics();
         assertSame(metrics, collapser2.getMetrics());
+
+        time.increment(1000);
         assertEquals(2L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_REQUEST_BATCHED));
         assertEquals(1L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_BATCH));
         assertEquals(0L, metrics.getRollingCount(HystrixRollingNumberEvent.RESPONSE_FROM_CACHE));
@@ -87,7 +93,8 @@ public class HystrixCollapserTest {
 
     @Test
     public void testMultipleBatches() throws Exception {
-        TestCollapserTimer timer = new TestCollapserTimer();
+        HystrixMockedTime time = new HystrixMockedTime();
+        TestCollapserTimer timer = new TestCollapserTimer(time);
         HystrixCollapser<List<String>, String, String> collapser1 = new TestRequestCollapser(timer, 1);
         Future<String> response1 = collapser1.queue();
         Future<String> response2 = new TestRequestCollapser(timer, 2).queue();
@@ -106,6 +113,8 @@ public class HystrixCollapserTest {
         assertEquals(2, HystrixRequestLog.getCurrentRequest().getAllExecutedCommands().size());
 
         HystrixCollapserMetrics metrics = collapser1.getMetrics();
+
+        time.increment(1000);
         assertEquals(3L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_REQUEST_BATCHED));
         assertEquals(2L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_BATCH));
         assertEquals(0L, metrics.getRollingCount(HystrixRollingNumberEvent.RESPONSE_FROM_CACHE));
@@ -113,7 +122,8 @@ public class HystrixCollapserTest {
 
     @Test
     public void testMaxRequestsInBatch() throws Exception {
-        TestCollapserTimer timer = new TestCollapserTimer();
+        HystrixMockedTime time = new HystrixMockedTime();
+        TestCollapserTimer timer = new TestCollapserTimer(time);
         HystrixCollapser<List<String>, String, String> collapser1 = new TestRequestCollapser(timer, 1, 2, 10);
         Future<String> response1 = collapser1.queue();
         Future<String> response2 = new TestRequestCollapser(timer, 2, 2, 10).queue();
@@ -128,6 +138,8 @@ public class HystrixCollapserTest {
         assertEquals(2, HystrixRequestLog.getCurrentRequest().getAllExecutedCommands().size());
 
         HystrixCollapserMetrics metrics = collapser1.getMetrics();
+
+        time.increment(1000);
         assertEquals(3L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_REQUEST_BATCHED));
         assertEquals(2L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_BATCH));
         assertEquals(0L, metrics.getRollingCount(HystrixRollingNumberEvent.RESPONSE_FROM_CACHE));
@@ -135,7 +147,8 @@ public class HystrixCollapserTest {
 
     @Test
     public void testRequestsOverTime() throws Exception {
-        TestCollapserTimer timer = new TestCollapserTimer();
+        HystrixMockedTime time = new HystrixMockedTime();
+        TestCollapserTimer timer = new TestCollapserTimer(time);
         HystrixCollapser<List<String>, String, String> collapser1 = new TestRequestCollapser(timer, 1);
         Future<String> response1 = collapser1.queue();
         timer.incrementTime(5);
@@ -161,6 +174,8 @@ public class HystrixCollapserTest {
         assertEquals(3, HystrixRequestLog.getCurrentRequest().getAllExecutedCommands().size());
 
         HystrixCollapserMetrics metrics = collapser1.getMetrics();
+
+        time.increment(1000);
         assertEquals(5L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_REQUEST_BATCHED));
         assertEquals(3L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_BATCH));
         assertEquals(0L, metrics.getRollingCount(HystrixRollingNumberEvent.RESPONSE_FROM_CACHE));
@@ -168,7 +183,8 @@ public class HystrixCollapserTest {
 
     @Test
     public void testUnsubscribeOnOneDoesntKillBatch() throws Exception {
-        TestCollapserTimer timer = new TestCollapserTimer();
+        HystrixMockedTime time = new HystrixMockedTime();
+        TestCollapserTimer timer = new TestCollapserTimer(time);
         HystrixCollapser<List<String>, String, String> collapser1 = new TestRequestCollapser(timer, 1);
         Future<String> response1 = collapser1.queue();
         Future<String> response2 = new TestRequestCollapser(timer, 2).queue();
@@ -190,6 +206,8 @@ public class HystrixCollapserTest {
 
         assertEquals(1, HystrixRequestLog.getCurrentRequest().getAllExecutedCommands().size());
         HystrixCollapserMetrics metrics = collapser1.getMetrics();
+
+        time.increment(1000);
         assertEquals(2L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_REQUEST_BATCHED));
         assertEquals(1L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_BATCH));
         assertEquals(0L, metrics.getRollingCount(HystrixRollingNumberEvent.RESPONSE_FROM_CACHE));
@@ -197,7 +215,8 @@ public class HystrixCollapserTest {
 
     @Test
     public void testShardedRequests() throws Exception {
-        TestCollapserTimer timer = new TestCollapserTimer();
+        HystrixMockedTime time = new HystrixMockedTime();
+        TestCollapserTimer timer = new TestCollapserTimer(time);
         HystrixCollapser<List<String>, String, String> collapser1 = new TestShardedRequestCollapser(timer, "1a");
         Future<String> response1 = collapser1.queue();
         Future<String> response2 = new TestShardedRequestCollapser(timer, "2b").queue();
@@ -213,6 +232,8 @@ public class HystrixCollapserTest {
         /* we should get 2 batches since it gets sharded */
         assertEquals(2, HystrixRequestLog.getCurrentRequest().getAllExecutedCommands().size());
         HystrixCollapserMetrics metrics = collapser1.getMetrics();
+
+        time.increment(1000);
         assertEquals(4L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_REQUEST_BATCHED));
         assertEquals(2L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_BATCH));
         assertEquals(0L, metrics.getRollingCount(HystrixRollingNumberEvent.RESPONSE_FROM_CACHE));
@@ -220,7 +241,8 @@ public class HystrixCollapserTest {
 
     @Test
     public void testRequestScope() throws Exception {
-        TestCollapserTimer timer = new TestCollapserTimer();
+        HystrixMockedTime time = new HystrixMockedTime();
+        TestCollapserTimer timer = new TestCollapserTimer(time);
         HystrixCollapser<List<String>, String, String> collapser1 = new TestRequestCollapser(timer, "1");
         Future<String> response1 = collapser1.queue();
         Future<String> response2 = new TestRequestCollapser(timer, "2").queue();
@@ -241,6 +263,8 @@ public class HystrixCollapserTest {
         // 2 different batches should execute, 1 per request
         assertEquals(2, HystrixRequestLog.getCurrentRequest().getAllExecutedCommands().size());
         HystrixCollapserMetrics metrics = collapser1.getMetrics();
+
+        time.increment(1000);
         assertEquals(4L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_REQUEST_BATCHED));
         assertEquals(2L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_BATCH));
         assertEquals(0L, metrics.getRollingCount(HystrixRollingNumberEvent.RESPONSE_FROM_CACHE));
@@ -248,7 +272,8 @@ public class HystrixCollapserTest {
 
     @Test
     public void testGlobalScope() throws Exception {
-        TestCollapserTimer timer = new TestCollapserTimer();
+        HystrixMockedTime time = new HystrixMockedTime();
+        TestCollapserTimer timer = new TestCollapserTimer(time);
         HystrixCollapser<List<String>, String, String> collapser1 = new TestGloballyScopedRequestCollapser(timer, "1");
         Future<String> response1 = collapser1.queue();
         Future<String> response2 = new TestGloballyScopedRequestCollapser(timer, "2").queue();
@@ -269,6 +294,8 @@ public class HystrixCollapserTest {
         // despite having cleared the cache in between we should have a single execution because this is on the global not request cache
         assertEquals(1, HystrixRequestLog.getCurrentRequest().getAllExecutedCommands().size());
         HystrixCollapserMetrics metrics = collapser1.getMetrics();
+
+        time.increment(1000);
         assertEquals(4L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_REQUEST_BATCHED));
         assertEquals(1L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_BATCH));
         assertEquals(0L, metrics.getRollingCount(HystrixRollingNumberEvent.RESPONSE_FROM_CACHE));
@@ -276,7 +303,8 @@ public class HystrixCollapserTest {
 
     @Test
     public void testErrorHandlingViaFutureException() throws Exception {
-        TestCollapserTimer timer = new TestCollapserTimer();
+        HystrixMockedTime time = new HystrixMockedTime();
+        TestCollapserTimer timer = new TestCollapserTimer(time);
         HystrixCollapser<List<String>, String, String> collapser1 = new TestRequestCollapserWithFaultyCreateCommand(timer, "1");
         Future<String> response1 = collapser1.queue();
         Future<String> response2 = new TestRequestCollapserWithFaultyCreateCommand(timer, "2").queue();
@@ -297,6 +325,8 @@ public class HystrixCollapserTest {
 
         assertEquals(0, HystrixRequestLog.getCurrentRequest().getAllExecutedCommands().size());
         HystrixCollapserMetrics metrics = collapser1.getMetrics();
+
+        time.increment(1000);
         assertEquals(2L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_REQUEST_BATCHED));
         assertEquals(0L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_BATCH));
         assertEquals(0L, metrics.getRollingCount(HystrixRollingNumberEvent.RESPONSE_FROM_CACHE));
@@ -304,7 +334,8 @@ public class HystrixCollapserTest {
 
     @Test
     public void testErrorHandlingWhenMapToResponseFails() throws Exception {
-        TestCollapserTimer timer = new TestCollapserTimer();
+        HystrixMockedTime time = new HystrixMockedTime();
+        TestCollapserTimer timer = new TestCollapserTimer(time);
         HystrixCollapser<List<String>, String, String> collapser1 = new TestRequestCollapserWithFaultyMapToResponse(timer, "1");
         Future<String> response1 = collapser1.queue();
         Future<String> response2 = new TestRequestCollapserWithFaultyMapToResponse(timer, "2").queue();
@@ -327,6 +358,8 @@ public class HystrixCollapserTest {
         // but it still executed the command once
         assertEquals(1, HystrixRequestLog.getCurrentRequest().getAllExecutedCommands().size());
         HystrixCollapserMetrics metrics = collapser1.getMetrics();
+
+        time.increment(1000);
         assertEquals(2L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_REQUEST_BATCHED));
         assertEquals(1L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_BATCH));
         assertEquals(0L, metrics.getRollingCount(HystrixRollingNumberEvent.RESPONSE_FROM_CACHE));
@@ -338,7 +371,8 @@ public class HystrixCollapserTest {
         HystrixRequestContext requestContext = HystrixRequestContext.initializeContext();
 
         // do actual work
-        TestCollapserTimer timer = new TestCollapserTimer();
+        HystrixMockedTime time = new HystrixMockedTime();
+        TestCollapserTimer timer = new TestCollapserTimer(time);
         HystrixCollapser<List<String>, String, String> collapser1 = new TestRequestCollapser(timer, 1);
         Future<String> response1 = collapser1.queue();
         timer.incrementTime(5);
@@ -381,6 +415,8 @@ public class HystrixCollapserTest {
         assertEquals(0, timer.tasks.size());
 
         HystrixCollapserMetrics metrics = collapser1.getMetrics();
+
+        time.increment(1000);
         assertEquals(5L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_REQUEST_BATCHED));
         assertEquals(3L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_BATCH));
         assertEquals(0L, metrics.getRollingCount(HystrixRollingNumberEvent.RESPONSE_FROM_CACHE));
@@ -391,7 +427,8 @@ public class HystrixCollapserTest {
         // simulate request lifecycle
         HystrixRequestContext requestContext = HystrixRequestContext.initializeContext();
 
-        final TestCollapserTimer timer = new TestCollapserTimer();
+        HystrixMockedTime time = new HystrixMockedTime();
+        final TestCollapserTimer timer = new TestCollapserTimer(time);
         final ConcurrentLinkedQueue<Future<String>> responses = new ConcurrentLinkedQueue<Future<String>>();
         ConcurrentLinkedQueue<Thread> threads = new ConcurrentLinkedQueue<Thread>();
 
@@ -462,6 +499,8 @@ public class HystrixCollapserTest {
         assertEquals(0, timer.tasks.size());
 
         HystrixCollapserMetrics metrics = collapser1.getMetrics();
+
+        time.increment(1000);
         assertEquals(504L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_REQUEST_BATCHED));
         assertEquals(3L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_BATCH));
         assertEquals(0L, metrics.getRollingCount(HystrixRollingNumberEvent.RESPONSE_FROM_CACHE));
@@ -475,7 +514,8 @@ public class HystrixCollapserTest {
         // simulate request lifecycle
         HystrixRequestContext.initializeContext();
 
-        final TestCollapserTimer timer = new TestCollapserTimer();
+        HystrixMockedTime time = new HystrixMockedTime();
+        TestCollapserTimer timer = new TestCollapserTimer(time);
         SuccessfulCacheableCollapsedCommand command1 = new SuccessfulCacheableCollapsedCommand(timer, "A", true);
         SuccessfulCacheableCollapsedCommand command2 = new SuccessfulCacheableCollapsedCommand(timer, "A", true);
 
@@ -513,6 +553,8 @@ public class HystrixCollapserTest {
         assertTrue(command.getExecutionEvents().contains(HystrixEventType.COLLAPSED));
 
         HystrixCollapserMetrics metrics = command1.getMetrics();
+
+        time.increment(1000);
         assertEquals(1L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_REQUEST_BATCHED));
         assertEquals(1L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_BATCH));
         assertEquals(2L, metrics.getRollingCount(HystrixRollingNumberEvent.RESPONSE_FROM_CACHE));
@@ -526,7 +568,8 @@ public class HystrixCollapserTest {
         // simulate request lifecycle
         HystrixRequestContext.initializeContext();
 
-        final TestCollapserTimer timer = new TestCollapserTimer();
+        HystrixMockedTime time = new HystrixMockedTime();
+        TestCollapserTimer timer = new TestCollapserTimer(time);
         SuccessfulCacheableCollapsedCommand command1 = new SuccessfulCacheableCollapsedCommand(timer, "A", true);
         SuccessfulCacheableCollapsedCommand command2 = new SuccessfulCacheableCollapsedCommand(timer, "B", true);
 
@@ -565,6 +608,8 @@ public class HystrixCollapserTest {
         assertTrue(command.getExecutionEvents().contains(HystrixEventType.COLLAPSED));
 
         HystrixCollapserMetrics metrics = command1.getMetrics();
+
+        time.increment(1000);
         assertEquals(2L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_REQUEST_BATCHED));
         assertEquals(1L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_BATCH));
         assertEquals(2L, metrics.getRollingCount(HystrixRollingNumberEvent.RESPONSE_FROM_CACHE));
@@ -578,7 +623,8 @@ public class HystrixCollapserTest {
         // simulate request lifecycle
         HystrixRequestContext.initializeContext();
 
-        final TestCollapserTimer timer = new TestCollapserTimer();
+        HystrixMockedTime time = new HystrixMockedTime();
+        TestCollapserTimer timer = new TestCollapserTimer(time);
         SuccessfulCacheableCollapsedCommand command1 = new SuccessfulCacheableCollapsedCommand(timer, "A", true);
         SuccessfulCacheableCollapsedCommand command2 = new SuccessfulCacheableCollapsedCommand(timer, "B", true);
         SuccessfulCacheableCollapsedCommand command3 = new SuccessfulCacheableCollapsedCommand(timer, "B", true);
@@ -622,6 +668,8 @@ public class HystrixCollapserTest {
         assertTrue(command.getExecutionEvents().contains(HystrixEventType.COLLAPSED));
 
         HystrixCollapserMetrics metrics = command1.getMetrics();
+
+        time.increment(1000);
         assertEquals(2L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_REQUEST_BATCHED));
         assertEquals(1L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_BATCH));
         assertEquals(4L, metrics.getRollingCount(HystrixRollingNumberEvent.RESPONSE_FROM_CACHE));
@@ -635,7 +683,8 @@ public class HystrixCollapserTest {
         // simulate request lifecycle
         HystrixRequestContext.initializeContext();
 
-        final TestCollapserTimer timer = new TestCollapserTimer();
+        HystrixMockedTime time = new HystrixMockedTime();
+        TestCollapserTimer timer = new TestCollapserTimer(time);
         SuccessfulCacheableCollapsedCommand command1 = new SuccessfulCacheableCollapsedCommand(timer, "A", false);
         SuccessfulCacheableCollapsedCommand command2 = new SuccessfulCacheableCollapsedCommand(timer, "B", false);
         SuccessfulCacheableCollapsedCommand command3 = new SuccessfulCacheableCollapsedCommand(timer, "B", false);
@@ -686,6 +735,8 @@ public class HystrixCollapserTest {
         assertTrue(commandB.getExecutionEvents().contains(HystrixEventType.COLLAPSED));
 
         HystrixCollapserMetrics metrics = command1.getMetrics();
+
+        time.increment(1000);
         assertEquals(6L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_REQUEST_BATCHED));
         assertEquals(2L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_BATCH));
         assertEquals(0L, metrics.getRollingCount(HystrixRollingNumberEvent.RESPONSE_FROM_CACHE));
@@ -701,7 +752,8 @@ public class HystrixCollapserTest {
 
         ConcurrentLinkedQueue<HystrixCommand<List<String>>> commands = new ConcurrentLinkedQueue<HystrixCommand<List<String>>>();
 
-        final TestCollapserTimer timer = new TestCollapserTimer();
+        HystrixMockedTime time = new HystrixMockedTime();
+        TestCollapserTimer timer = new TestCollapserTimer(time);
         // pass in 'null' which will cause an NPE to be thrown
         SuccessfulCacheableCollapsedCommand command1 = new SuccessfulCacheableCollapsedCommand(timer, null, true, commands);
         SuccessfulCacheableCollapsedCommand command2 = new SuccessfulCacheableCollapsedCommand(timer, null, true, commands);
@@ -748,6 +800,8 @@ public class HystrixCollapserTest {
         assertTrue(command.getExecutionEvents().contains(HystrixEventType.COLLAPSED));
 
         HystrixCollapserMetrics metrics = command1.getMetrics();
+
+        time.increment(1000);
         assertEquals(1L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_REQUEST_BATCHED));
         assertEquals(1L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_BATCH));
         assertEquals(2L, metrics.getRollingCount(HystrixRollingNumberEvent.RESPONSE_FROM_CACHE));
@@ -763,7 +817,8 @@ public class HystrixCollapserTest {
 
         ConcurrentLinkedQueue<HystrixCommand<List<String>>> commands = new ConcurrentLinkedQueue<HystrixCommand<List<String>>>();
 
-        final TestCollapserTimer timer = new TestCollapserTimer();
+        HystrixMockedTime time = new HystrixMockedTime();
+        TestCollapserTimer timer = new TestCollapserTimer(time);
         // pass in 'null' which will cause an NPE to be thrown
         SuccessfulCacheableCollapsedCommand command1 = new SuccessfulCacheableCollapsedCommand(timer, "TIMEOUT", true, commands);
         SuccessfulCacheableCollapsedCommand command2 = new SuccessfulCacheableCollapsedCommand(timer, "TIMEOUT", true, commands);
@@ -804,6 +859,8 @@ public class HystrixCollapserTest {
         assertEquals(1, HystrixRequestLog.getCurrentRequest().getAllExecutedCommands().size());
 
         HystrixCollapserMetrics metrics = command1.getMetrics();
+
+        time.increment(1000);
         assertEquals(1L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_REQUEST_BATCHED));
         assertEquals(1L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_BATCH));
         assertEquals(2L, metrics.getRollingCount(HystrixRollingNumberEvent.RESPONSE_FROM_CACHE));
@@ -814,7 +871,8 @@ public class HystrixCollapserTest {
      */
     @Test
     public void testRequestWithCommandShortCircuited() throws Exception {
-        TestCollapserTimer timer = new TestCollapserTimer();
+        HystrixMockedTime time = new HystrixMockedTime();
+        TestCollapserTimer timer = new TestCollapserTimer(time);
         HystrixCollapser<List<String>, String, String> collapser1 = new TestRequestCollapserWithShortCircuitedCommand(timer, "1");
         Future<String> response1 = collapser1.queue();
         Future<String> response2 = new TestRequestCollapserWithShortCircuitedCommand(timer, "2").queue();
@@ -839,6 +897,8 @@ public class HystrixCollapserTest {
         assertEquals(1, HystrixRequestLog.getCurrentRequest().getAllExecutedCommands().size());
 
         HystrixCollapserMetrics metrics = collapser1.getMetrics();
+
+        time.increment(1000);
         assertEquals(2L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_REQUEST_BATCHED));
         assertEquals(1L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_BATCH));
         assertEquals(0L, metrics.getRollingCount(HystrixRollingNumberEvent.RESPONSE_FROM_CACHE));
@@ -851,8 +911,9 @@ public class HystrixCollapserTest {
      */
     @Test
     public void testVoidResponseTypeFireAndForgetCollapsing1() throws Exception {
-        TestCollapserTimer timer = new TestCollapserTimer();
-        TestCollapserWithVoidResponseType collapser1 = new TestCollapserWithVoidResponseType(timer, 1);
+        HystrixMockedTime time = new HystrixMockedTime();
+        TestCollapserTimer timer = new TestCollapserTimer(time);
+        TestCollapserWithVoidResponseType collapser1 = new TestCollapserWithVoidResponseType(timer, 1, time);
         Future<Void> response1 = collapser1.queue();
         Future<Void> response2 = new TestCollapserWithVoidResponseType(timer, 2).queue();
         timer.incrementTime(100); // let time pass that equals the default delay/period
@@ -865,6 +926,8 @@ public class HystrixCollapserTest {
         assertEquals(1, HystrixRequestLog.getCurrentRequest().getAllExecutedCommands().size());
 
         HystrixCollapserMetrics metrics = collapser1.getMetrics();
+
+        time.increment(1000);
         assertEquals(2L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_REQUEST_BATCHED));
         assertEquals(1L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_BATCH));
         assertEquals(0L, metrics.getRollingCount(HystrixRollingNumberEvent.RESPONSE_FROM_CACHE));
@@ -877,7 +940,8 @@ public class HystrixCollapserTest {
      */
     @Test
     public void testVoidResponseTypeFireAndForgetCollapsing2() throws Exception {
-        TestCollapserTimer timer = new TestCollapserTimer();
+        HystrixMockedTime time = new HystrixMockedTime();
+        TestCollapserTimer timer = new TestCollapserTimer(time);
         TestCollapserWithVoidResponseTypeAndMissingMapResponseToRequests collapser1 = new TestCollapserWithVoidResponseTypeAndMissingMapResponseToRequests(timer, 1);
         Future<Void> response1 = collapser1.queue();
         new TestCollapserWithVoidResponseTypeAndMissingMapResponseToRequests(timer, 2).queue();
@@ -895,6 +959,8 @@ public class HystrixCollapserTest {
         assertEquals(1, HystrixRequestLog.getCurrentRequest().getAllExecutedCommands().size());
 
         HystrixCollapserMetrics metrics = collapser1.getMetrics();
+
+        time.increment(1000);
         assertEquals(2L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_REQUEST_BATCHED));
         assertEquals(1L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_BATCH));
         assertEquals(0L, metrics.getRollingCount(HystrixRollingNumberEvent.RESPONSE_FROM_CACHE));
@@ -914,6 +980,8 @@ public class HystrixCollapserTest {
         assertEquals(1, HystrixRequestLog.getCurrentRequest().getAllExecutedCommands().size());
 
         HystrixCollapserMetrics metrics = collapser1.getMetrics();
+
+        Thread.sleep(1000);
         assertEquals(1L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_REQUEST_BATCHED));
         assertEquals(1L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_BATCH));
         assertEquals(0L, metrics.getRollingCount(HystrixRollingNumberEvent.RESPONSE_FROM_CACHE));
@@ -956,15 +1024,15 @@ public class HystrixCollapserTest {
             this(Scope.REQUEST, timer, value, defaultMaxRequestsInBatch, defaultTimerDelayInMilliseconds, executionLog);
         }
 
-        private static HystrixCollapserMetrics createMetrics() {
+        private static HystrixCollapserMetrics createMetrics(HystrixTime time) {
             HystrixCollapserKey key = HystrixCollapserKey.Factory.asKey("COLLAPSER_ONE");
-            return HystrixCollapserMetrics.getInstance(key, new HystrixPropertiesCollapserDefault(key, HystrixCollapserProperties.Setter()));
+            return HystrixCollapserMetrics.getInstance(key, new HystrixPropertiesCollapserDefault(key, HystrixCollapserProperties.Setter()), time);
         }
 
         public TestRequestCollapser(Scope scope, TestCollapserTimer timer, String value, int defaultMaxRequestsInBatch, int defaultTimerDelayInMilliseconds, ConcurrentLinkedQueue<HystrixCommand<List<String>>> executionLog) {
             // use a CollapserKey based on the CollapserTimer object reference so it's unique for each timer as we don't want caching
             // of properties to occur and we're using the default HystrixProperty which typically does caching
-            super(collapserKeyFromString(timer), scope, timer, HystrixCollapserProperties.Setter().withMaxRequestsInBatch(defaultMaxRequestsInBatch).withTimerDelayInMilliseconds(defaultTimerDelayInMilliseconds), createMetrics());
+            super(collapserKeyFromString(timer), scope, timer, HystrixCollapserProperties.Setter().withMaxRequestsInBatch(defaultMaxRequestsInBatch).withTimerDelayInMilliseconds(defaultTimerDelayInMilliseconds), createMetrics(timer.time));
             this.value = value;
             this.commandsExecuted = executionLog;
         }
@@ -1189,6 +1257,11 @@ public class HystrixCollapserTest {
     /* package */ static class TestCollapserTimer implements CollapserTimer {
 
         private final ConcurrentLinkedQueue<ATask> tasks = new ConcurrentLinkedQueue<ATask>();
+        final HystrixMockedTime time;
+
+        TestCollapserTimer(HystrixMockedTime time) {
+            this.time = time;
+        }
 
         @Override
         public Reference<TimerListener> addListener(final TimerListener collapseTask) {
@@ -1227,6 +1300,7 @@ public class HystrixCollapserTest {
          * @param timeInMilliseconds amount of time to increment
          */
         public synchronized void incrementTime(int timeInMilliseconds) {
+            time.increment(timeInMilliseconds);
             for (ATask t : tasks) {
                 t.incrementTime(timeInMilliseconds);
             }
@@ -1312,7 +1386,14 @@ public class HystrixCollapserTest {
         private final Integer value;
 
         public TestCollapserWithVoidResponseType(CollapserTimer timer, int value) {
-            super(collapserKeyFromString(timer), Scope.REQUEST, timer, HystrixCollapserProperties.Setter().withMaxRequestsInBatch(1000).withTimerDelayInMilliseconds(50));
+            super(collapserKeyFromString(timer), Scope.REQUEST, timer, HystrixCollapserProperties.Setter().withMaxRequestsInBatch(1000).withTimerDelayInMilliseconds(50),
+                    HystrixCollapserMetrics.getInstance(collapserKeyFromString(timer), new HystrixPropertiesCollapserDefault(collapserKeyFromString(timer), HystrixCollapserProperties.Setter())));
+            this.value = value;
+        }
+
+        public TestCollapserWithVoidResponseType(CollapserTimer timer, int value, HystrixTime time) {
+            super(collapserKeyFromString(timer), Scope.REQUEST, timer, HystrixCollapserProperties.Setter().withMaxRequestsInBatch(1000).withTimerDelayInMilliseconds(50),
+                    HystrixCollapserMetrics.getInstance(collapserKeyFromString(timer), new HystrixPropertiesCollapserDefault(collapserKeyFromString(timer), HystrixCollapserProperties.Setter()), time));
             this.value = value;
         }
 
@@ -1323,7 +1404,7 @@ public class HystrixCollapserTest {
 
         @Override
         protected HystrixCommand<Void> createCommand(Collection<CollapsedRequest<Void, Integer>> requests) {
-
+            System.out.println("createCommand");
             ArrayList<Integer> args = new ArrayList<Integer>();
             for (CollapsedRequest<Void, Integer> request : requests) {
                 args.add(request.getArgument());
@@ -1344,8 +1425,9 @@ public class HystrixCollapserTest {
 
         private final Integer value;
 
-        public TestCollapserWithVoidResponseTypeAndMissingMapResponseToRequests(CollapserTimer timer, int value) {
-            super(collapserKeyFromString(timer), Scope.REQUEST, timer, HystrixCollapserProperties.Setter().withMaxRequestsInBatch(1000).withTimerDelayInMilliseconds(50));
+        public TestCollapserWithVoidResponseTypeAndMissingMapResponseToRequests(TestCollapserTimer timer, int value) {
+            super(collapserKeyFromString(timer), Scope.REQUEST, timer, HystrixCollapserProperties.Setter().withMaxRequestsInBatch(1000).withTimerDelayInMilliseconds(50),
+                    HystrixCollapserMetrics.getInstance(collapserKeyFromString(timer), new HystrixPropertiesCollapserDefault(collapserKeyFromString(timer), HystrixCollapserProperties.Setter()), timer.time));
             this.value = value;
         }
 

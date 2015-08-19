@@ -22,6 +22,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import com.netflix.hystrix.strategy.HystrixPlugins;
 import com.netflix.hystrix.strategy.metrics.HystrixMetricsCollection;
 import com.netflix.hystrix.util.HystrixRollingNumberEvent;
+import com.netflix.hystrix.util.time.HystrixTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -65,6 +66,35 @@ public abstract class HystrixCollapserMetrics extends HystrixMetrics {
         // it doesn't exist so we need to create it
         HystrixMetricsCollection metricsCollectionStrategy = HystrixPlugins.getInstance().getMetricsCollection();
         collapserMetrics = metricsCollectionStrategy.getCollapserMetricsInstance(key, properties);
+        // attempt to store it (race other threads)
+        HystrixCollapserMetrics existing = metrics.putIfAbsent(key.name(), collapserMetrics);
+        if (existing == null) {
+            // we won the thread-race to store the instance we created
+            return collapserMetrics;
+        } else {
+            // we lost so return 'existing' and let the one we created be garbage collected
+            return existing;
+        }
+    }
+
+    /**
+     * Get or create the {@link HystrixCollapserMetrics} instance for a given {@link HystrixCollapserKey}.
+     * <p>
+     * This is thread-safe and ensures only 1 {@link HystrixCollapserMetrics} per {@link HystrixCollapserKey}.
+     *
+     * @param key
+     *            {@link HystrixCollapserKey} of {@link HystrixCollapser} instance requesting the {@link HystrixCollapserMetrics}
+     * @return {@link HystrixCollapserMetrics}
+     */
+    /*package*/ static HystrixCollapserMetrics getInstance(HystrixCollapserKey key, HystrixCollapserProperties properties, HystrixTime time) {
+        // attempt to retrieve from cache first
+        HystrixCollapserMetrics collapserMetrics = metrics.get(key.name());
+        if (collapserMetrics != null) {
+            return collapserMetrics;
+        }
+        // it doesn't exist so we need to create it
+        HystrixMetricsCollection metricsCollectionStrategy = HystrixPlugins.getInstance().getMetricsCollection();
+        collapserMetrics = metricsCollectionStrategy.getCollapserMetricsInstance(key, properties, time);
         // attempt to store it (race other threads)
         HystrixCollapserMetrics existing = metrics.putIfAbsent(key.name(), collapserMetrics);
         if (existing == null) {

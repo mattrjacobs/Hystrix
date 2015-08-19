@@ -23,6 +23,8 @@ import com.netflix.hystrix.HystrixThreadPoolMetrics;
 import com.netflix.hystrix.HystrixThreadPoolProperties;
 import com.netflix.hystrix.util.HystrixRollingNumber;
 import com.netflix.hystrix.util.HystrixRollingNumberEvent;
+import com.netflix.hystrix.util.time.HystrixActualTime;
+import com.netflix.hystrix.util.time.HystrixTime;
 
 /**
  * Used by {@link HystrixThreadPool} to record metrics.
@@ -32,10 +34,13 @@ public class HystrixThreadPoolMetricsSummary extends HystrixThreadPoolMetrics {
     private final HystrixRollingNumber counter;
 
     /* package */HystrixThreadPoolMetricsSummary(HystrixThreadPoolKey threadPoolKey, ThreadPoolExecutor threadPool, HystrixThreadPoolProperties properties) {
-        super(threadPoolKey, threadPool, properties);
-        this.counter = new HystrixRollingNumber(properties.metricsRollingStatisticalWindowInMilliseconds().get(), properties.metricsRollingStatisticalWindowBuckets().get());
+        this(threadPoolKey, threadPool, properties, HystrixActualTime.getInstance());
     }
 
+    /* package */HystrixThreadPoolMetricsSummary(HystrixThreadPoolKey threadPoolKey, ThreadPoolExecutor threadPool, HystrixThreadPoolProperties properties, HystrixTime time) {
+        super(threadPoolKey, threadPool, properties);
+        this.counter = new HystrixRollingNumber(time, properties.metricsRollingStatisticalWindowInMilliseconds().get(), properties.metricsRollingStatisticalWindowBuckets().get());
+    }
 
     @Override
     public long getCumulativeCount(HystrixRollingNumberEvent event) {

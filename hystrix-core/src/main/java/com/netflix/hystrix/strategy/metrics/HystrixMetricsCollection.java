@@ -26,6 +26,8 @@ import com.netflix.hystrix.HystrixThreadPoolKey;
 import com.netflix.hystrix.HystrixThreadPoolMetrics;
 import com.netflix.hystrix.HystrixThreadPoolProperties;
 import com.netflix.hystrix.strategy.eventnotifier.HystrixEventNotifier;
+import com.netflix.hystrix.util.time.HystrixActualTime;
+import com.netflix.hystrix.util.time.HystrixTime;
 
 import java.util.concurrent.ThreadPoolExecutor;
 
@@ -38,5 +40,9 @@ public abstract class HystrixMetricsCollection {
 
     public abstract HystrixThreadPoolMetrics getThreadPoolMetricsInstance(HystrixThreadPoolKey key, ThreadPoolExecutor threadPool, HystrixThreadPoolProperties properties);
 
-    public abstract HystrixCollapserMetrics getCollapserMetricsInstance(HystrixCollapserKey key, HystrixCollapserProperties properties);
+    public HystrixCollapserMetrics getCollapserMetricsInstance(HystrixCollapserKey key, HystrixCollapserProperties properties) {
+        return getCollapserMetricsInstance(key, properties, HystrixActualTime.getInstance());
+    }
+
+    public abstract HystrixCollapserMetrics getCollapserMetricsInstance(HystrixCollapserKey key, HystrixCollapserProperties properties, HystrixTime time);
 }

@@ -48,6 +48,7 @@ public class HystrixThreadPoolMetricsTest {
 
 		//then
 		assertEquals(1, instances.size());
+		Thread.sleep(1000);
 		assertEquals(1, instances.iterator().next().getRollingCountThreadsExecuted());
 	}
 

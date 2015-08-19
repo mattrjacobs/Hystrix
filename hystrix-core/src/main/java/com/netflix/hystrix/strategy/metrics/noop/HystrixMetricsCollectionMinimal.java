@@ -27,6 +27,7 @@ import com.netflix.hystrix.HystrixThreadPoolMetrics;
 import com.netflix.hystrix.HystrixThreadPoolProperties;
 import com.netflix.hystrix.strategy.eventnotifier.HystrixEventNotifier;
 import com.netflix.hystrix.strategy.metrics.HystrixMetricsCollection;
+import com.netflix.hystrix.util.time.HystrixTime;
 
 import java.util.concurrent.ThreadPoolExecutor;
 
@@ -43,7 +44,7 @@ public class HystrixMetricsCollectionMinimal extends HystrixMetricsCollection {
     }
 
     @Override
-    public HystrixCollapserMetrics getCollapserMetricsInstance(HystrixCollapserKey key, HystrixCollapserProperties properties) {
+    public HystrixCollapserMetrics getCollapserMetricsInstance(HystrixCollapserKey key, HystrixCollapserProperties properties, HystrixTime time) {
         return new HystrixCollapserMetricsNoOp(key, properties);
     }
 }

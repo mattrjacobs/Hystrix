@@ -24,6 +24,8 @@ import java.util.concurrent.Future;
 
 import com.netflix.hystrix.strategy.properties.HystrixPropertiesCollapserDefault;
 import com.netflix.hystrix.util.HystrixRollingNumberEvent;
+import com.netflix.hystrix.util.time.HystrixMockedTime;
+import com.netflix.hystrix.util.time.HystrixTime;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -59,7 +61,8 @@ public class HystrixObservableCollapserTest {
 
     @Test
     public void testTwoRequests() throws Exception {
-        TestCollapserTimer timer = new TestCollapserTimer();
+        HystrixMockedTime time = new HystrixMockedTime();
+        TestCollapserTimer timer = new TestCollapserTimer(time);
         HystrixObservableCollapser<String, String, String, String> collapser1 = new TestRequestCollapser(timer, 1);
         HystrixObservableCollapser<String, String, String, String> collapser2 = new TestRequestCollapser(timer, 2);
         Future<String> response1 = collapser1.observe().toBlocking().toFuture();
@@ -73,6 +76,8 @@ public class HystrixObservableCollapserTest {
 
         HystrixCollapserMetrics metrics = collapser1.getMetrics();
         assertSame(metrics, collapser2.getMetrics());
+
+        time.increment(1000);
         assertEquals(2L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_REQUEST_BATCHED));
         assertEquals(1L, metrics.getRollingCount(HystrixRollingNumberEvent.COLLAPSER_BATCH));
         assertEquals(0L, metrics.getRollingCount(HystrixRollingNumberEvent.RESPONSE_FROM_CACHE));
@@ -120,15 +125,15 @@ public class HystrixObservableCollapserTest {
             this(Scope.REQUEST, timer, value, defaultMaxRequestsInBatch, defaultTimerDelayInMilliseconds, executionLog);
         }
 
-        private static HystrixCollapserMetrics createMetrics() {
+        private static HystrixCollapserMetrics createMetrics(HystrixTime time) {
             HystrixCollapserKey key = HystrixCollapserKey.Factory.asKey("COLLAPSER_ONE");
-            return HystrixCollapserMetrics.getInstance(key, new HystrixPropertiesCollapserDefault(key, HystrixCollapserProperties.Setter()));
+            return HystrixCollapserMetrics.getInstance(key, new HystrixPropertiesCollapserDefault(key, HystrixCollapserProperties.Setter()), time);
         }
 
         public TestRequestCollapser(Scope scope, TestCollapserTimer timer, String value, int defaultMaxRequestsInBatch, int defaultTimerDelayInMilliseconds, ConcurrentLinkedQueue<HystrixObservableCommand<String>> executionLog) {
             // use a CollapserKey based on the CollapserTimer object reference so it's unique for each timer as we don't want caching
             // of properties to occur and we're using the default HystrixProperty which typically does caching
-            super(collapserKeyFromString(timer), scope, timer, HystrixCollapserProperties.Setter().withMaxRequestsInBatch(defaultMaxRequestsInBatch).withTimerDelayInMilliseconds(defaultTimerDelayInMilliseconds), createMetrics());
+            super(collapserKeyFromString(timer), scope, timer, HystrixCollapserProperties.Setter().withMaxRequestsInBatch(defaultMaxRequestsInBatch).withTimerDelayInMilliseconds(defaultTimerDelayInMilliseconds), createMetrics(timer.time));
             this.value = value;
             this.commandsExecuted = executionLog;
         }

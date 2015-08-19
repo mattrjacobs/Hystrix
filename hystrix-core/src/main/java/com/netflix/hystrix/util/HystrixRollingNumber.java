@@ -200,6 +200,7 @@ public class HystrixRollingNumber extends HystrixRollingMetrics<HystrixCountersB
      */
     //TODO Add documentation - principle is that this method is available, but expensive.  Common calculations (getRollingSum) should
     //not include it, but it may be done ad-hoc
+    //TODO In some concrete class, this should get added in to make sure we always call it for getRollingSum - it just happens to return 0 in this impl
     public long getValueOfLatestBucket(HystrixRollingNumberEvent type) {
         return 0;
 //        readLatestBucketLock.lock();
