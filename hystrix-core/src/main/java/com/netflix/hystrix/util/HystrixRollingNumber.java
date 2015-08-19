@@ -29,7 +29,7 @@ import org.slf4j.LoggerFactory;
 import com.netflix.hystrix.strategy.properties.HystrixProperty;
 import rx.functions.Func0;
 //TODO mark which methods must be accessed in a single-threaded manner
-//TODO What about different types for placeholderBuckets and buckets with data? This could avoid the weired null checks everywhere
+//TODO What about different types for placeholderBuckets and buckets with data? This could avoid the weird null checks everywhere
 //TODO update below Javadoc
 /**
  * A number which can be used to track counters (increment) or set values over time.
@@ -71,14 +71,11 @@ public class HystrixRollingNumber extends HystrixRollingMetrics<HystrixCountersB
     //for writing increments - represents counts by type as a histogram
     private final Recorder counter = new Recorder(2);
     private final Histogram partialLatestSnapshot = new Histogram(2);
-    private volatile Histogram partialHistogramToRecycle;
     //for writing a multi-valued counter by event
     private final ConcurrentMap<HystrixRollingNumberEvent, Recorder> writeOnlyDistributions = new ConcurrentHashMap<HystrixRollingNumberEvent, Recorder>();
     //for reading a multi-valued counter by event
     //TODO instead of DistributionSnapshot, what about just a long?
     private final ConcurrentMap<HystrixRollingNumberEvent, DistributionSnapshot> distributionSnapshots = new ConcurrentHashMap<HystrixRollingNumberEvent, DistributionSnapshot>();
-
-    private ReentrantLock readLatestBucketLock = new ReentrantLock();
 
     /**
      * Construct a counter, with configurable properties for how many buckets, and how long of an interval to track
@@ -285,7 +282,7 @@ public class HystrixRollingNumber extends HystrixRollingMetrics<HystrixCountersB
 
     @Override
     protected HystrixCountersBucket getNewBucket(long startTime, HystrixCountersBucket bucketToRecycle) {
-        System.out.println("getNewBucket : " + startTime + ", recycling : " + bucketToRecycle);
+        //System.out.println("getNewBucket : " + startTime + ", recycling : " + bucketToRecycle);
         HystrixCountersBucket mostRecentBucket = buckets.peekLast();
         if (mostRecentBucket != null) {
             //we should create a new histogram
@@ -315,10 +312,10 @@ public class HystrixRollingNumber extends HystrixRollingMetrics<HystrixCountersB
                     }
                 }
             }
-            System.out.println("Assigning current recorder value to : " + mostRecentBucket);
+            //System.out.println("Assigning current recorder value to : " + mostRecentBucket);
         }
         HystrixCountersBucket newBucket = new HystrixCountersBucket(startTime);
-        System.out.println("created bucket : " + newBucket + " @ " + startTime);
+        //System.out.println("created bucket : " + newBucket + " @ " + startTime);
         return newBucket;
     }
 
@@ -332,7 +329,7 @@ public class HystrixRollingNumber extends HystrixRollingMetrics<HystrixCountersB
         for (HystrixRollingNumberEvent eventType: HystrixRollingNumberEvent.values()) {
             if (eventType.isMaxUpdater()) {
                 DistributionSnapshot newDistributionSnapshot = new DistributionSnapshot(buckets, eventType);
-                System.out.println("New distributionSnapshot : " + newDistributionSnapshot + " : " + newDistributionSnapshot.getMaxValue());
+                //System.out.println("New distributionSnapshot : " + newDistributionSnapshot + " : " + newDistributionSnapshot.getMaxValue());
                 distributionSnapshots.put(eventType, newDistributionSnapshot);
             }
         }
@@ -347,13 +344,13 @@ public class HystrixRollingNumber extends HystrixRollingMetrics<HystrixCountersB
             this();
             for (HystrixCountersBucket bucket: buckets) {
                 if (bucket.histogram != null) {
-                    System.out.println("Bucket @ " + bucket.windowStart + " has non-null histogram : " + bucket.histogram);
+                    //System.out.println("Bucket @ " + bucket.windowStart + " has non-null histogram : " + bucket.histogram);
                     for (HystrixRollingNumberEvent eventType: HystrixRollingNumberEvent.values()) {
                         int eventOrdinal = eventType.ordinal();
                         counter[eventOrdinal] += (int) bucket.histogram.getCountAtValue(eventOrdinal);
                     }
                 } else {
-                    System.out.println("Bucket @ " + bucket.windowStart + " has null histogram : " + bucket.histogram);
+                    //System.out.println("Bucket @ " + bucket.windowStart + " has null histogram : " + bucket.histogram);
                 }
             }
         }
@@ -370,7 +367,7 @@ public class HystrixRollingNumber extends HystrixRollingMetrics<HystrixCountersB
 
         public void add(HystrixCountersBucket bucket) {
             Histogram newHistogram = bucket.histogram;
-            System.out.println("Add bucket @ " + bucket.windowStart + " : " + bucket.histogram);
+            //System.out.println("Add bucket @ " + bucket.windowStart + " : " + bucket.histogram);
             for (int i = 0; i < counter.length; i++) {
                 counter[i] = counter[i] + newHistogram.getCountAtValue(i);
             }

@@ -34,7 +34,6 @@ import rx.functions.Func0;
  * Each bucket will contain a circular array of long values and if more than the configured amount (1000 values for example) it will wrap around and overwrite values until time passes and a new bucket
  * is allocated. This sampling approach for high volume metrics is done to conserve memory and reduce sorting time when calculating percentiles.
  */
-//TODO should be HystrixRollingDistribution
 public class HystrixRollingPercentile extends HystrixRollingMetrics<HystrixHistogramBucket> {
 
     /*
@@ -67,7 +66,7 @@ public class HystrixRollingPercentile extends HystrixRollingMetrics<HystrixHisto
      *            {@code HystrixProperty<Boolean>} whether data should be tracked and percentiles calculated.
      *            <p>
      *            If 'false' methods will do nothing.
-     * @deprecated Please use the constructor with non-configurable properties {@link HystrixRollingPercentile(Time, int, int, int, HystrixProperty<Boolean>}
+     * @deprecated Please use the constructor with non-configurable properties {@link HystrixRollingPercentile(HystrixTime, int, int, int, HystrixProperty<Boolean>}
      */
     @Deprecated
     public HystrixRollingPercentile(HystrixProperty<Integer> timeInMilliseconds, HystrixProperty<Integer> numberOfBuckets, HystrixProperty<Integer> bucketDataLength, HystrixProperty<Boolean> enabled) {
@@ -171,7 +170,7 @@ public class HystrixRollingPercentile extends HystrixRollingMetrics<HystrixHisto
 
     @Override
     protected HystrixHistogramBucket getNewBucket(long startTime, HystrixHistogramBucket bucketToRecycle) {
-        System.out.println("getNewBucket : " + startTime + ", recycling : " + bucketToRecycle);
+        //System.out.println("getNewBucket : " + startTime + ", recycling : " + bucketToRecycle);
         HystrixHistogramBucket mostRecentBucket = buckets.peekLast();
         if (mostRecentBucket != null) {
             //we should create a new histogram
@@ -319,6 +318,7 @@ public class HystrixRollingPercentile extends HystrixRollingMetrics<HystrixHisto
         }
 
         private synchronized int getArbitraryPercentile(double percentile) {
+            System.out.println("Synchronized getArbitaryPercentile was invoked with : " + percentile);
             return (int) aggregateHistogram.getValueAtPercentile(percentile);
         }
 
