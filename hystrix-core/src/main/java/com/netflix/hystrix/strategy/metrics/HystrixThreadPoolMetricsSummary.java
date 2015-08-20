@@ -21,6 +21,7 @@ import com.netflix.hystrix.HystrixThreadPool;
 import com.netflix.hystrix.HystrixThreadPoolKey;
 import com.netflix.hystrix.HystrixThreadPoolMetrics;
 import com.netflix.hystrix.HystrixThreadPoolProperties;
+import com.netflix.hystrix.util.HystrixHistogramForCounterHistogramPerMaxRollingNumber;
 import com.netflix.hystrix.util.HystrixRollingNumber;
 import com.netflix.hystrix.util.HystrixRollingNumberEvent;
 import com.netflix.hystrix.util.time.HystrixActualTime;
@@ -39,7 +40,8 @@ public class HystrixThreadPoolMetricsSummary extends HystrixThreadPoolMetrics {
 
     /* package */HystrixThreadPoolMetricsSummary(HystrixThreadPoolKey threadPoolKey, ThreadPoolExecutor threadPool, HystrixThreadPoolProperties properties, HystrixTime time) {
         super(threadPoolKey, threadPool, properties);
-        this.counter = new HystrixRollingNumber(time, properties.metricsRollingStatisticalWindowInMilliseconds().get(), properties.metricsRollingStatisticalWindowBuckets().get());
+        //TODO this should come from metrics collection strategy
+        this.counter = new HystrixHistogramForCounterHistogramPerMaxRollingNumber(time, properties.metricsRollingStatisticalWindowInMilliseconds().get(), properties.metricsRollingStatisticalWindowBuckets().get());
     }
 
     @Override

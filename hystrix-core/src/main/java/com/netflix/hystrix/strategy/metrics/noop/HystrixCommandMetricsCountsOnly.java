@@ -21,6 +21,7 @@ import com.netflix.hystrix.HystrixCommandMetrics;
 import com.netflix.hystrix.HystrixCommandProperties;
 import com.netflix.hystrix.HystrixThreadPoolKey;
 import com.netflix.hystrix.strategy.eventnotifier.HystrixEventNotifier;
+import com.netflix.hystrix.util.HystrixHistogramForCounterHistogramPerMaxRollingNumber;
 import com.netflix.hystrix.util.HystrixRollingNumber;
 import com.netflix.hystrix.util.HystrixRollingNumberEvent;
 
@@ -33,7 +34,7 @@ public class HystrixCommandMetricsCountsOnly extends HystrixCommandMetrics {
 
     public HystrixCommandMetricsCountsOnly(HystrixCommandKey key, HystrixCommandGroupKey commandGroup, HystrixThreadPoolKey threadPoolKey, HystrixCommandProperties properties, HystrixEventNotifier eventNotifier) {
         super(key, commandGroup, threadPoolKey, properties, eventNotifier);
-        this.counter = new HystrixRollingNumber(properties.metricsRollingStatisticalWindowInMilliseconds().get(), properties.metricsRollingStatisticalWindowBuckets().get());
+        this.counter = new HystrixHistogramForCounterHistogramPerMaxRollingNumber(properties.metricsRollingStatisticalWindowInMilliseconds().get(), properties.metricsRollingStatisticalWindowBuckets().get());
     }
 
     /**

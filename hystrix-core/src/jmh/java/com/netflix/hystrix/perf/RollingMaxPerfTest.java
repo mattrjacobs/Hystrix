@@ -15,6 +15,7 @@
  */
 package com.netflix.hystrix.perf;
 
+import com.netflix.hystrix.util.HystrixHistogramForCounterHistogramPerMaxRollingNumber;
 import com.netflix.hystrix.util.HystrixRollingNumber;
 import com.netflix.hystrix.util.HystrixRollingNumberEvent;
 import org.openjdk.jmh.annotations.Benchmark;
@@ -38,7 +39,7 @@ public class RollingMaxPerfTest {
 
         @Setup(Level.Iteration)
         public void setUp() {
-            counter = new HystrixRollingNumber(100, 10);
+            counter = new HystrixHistogramForCounterHistogramPerMaxRollingNumber(100, 10);
         }
     }
 

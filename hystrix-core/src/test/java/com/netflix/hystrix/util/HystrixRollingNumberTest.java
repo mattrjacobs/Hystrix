@@ -27,7 +27,7 @@ public class HystrixRollingNumberTest {
     public void testCreatesBuckets() {
         HystrixMockedTime time = new HystrixMockedTime();
         try {
-            HystrixRollingNumber counter = new HystrixRollingNumber(time, 200, 10);
+            HystrixRollingNumber counter = new HystrixHistogramForCounterHistogramPerMaxRollingNumber(time, 200, 10);
             // confirm the initial settings
             assertEquals(200, counter.timeInMilliseconds);
             assertEquals(10, counter.numberOfBuckets);
@@ -59,7 +59,7 @@ public class HystrixRollingNumberTest {
     public void testResetBuckets() {
         HystrixMockedTime time = new HystrixMockedTime();
         try {
-            HystrixRollingNumber counter = new HystrixRollingNumber(time, 200, 10);
+            HystrixRollingNumber counter = new HystrixHistogramForCounterHistogramPerMaxRollingNumber(time, 200, 10);
 
             // we start out with 0 buckets in the queue
             assertEquals(0, counter.buckets.size());
@@ -89,7 +89,7 @@ public class HystrixRollingNumberTest {
     public void testEmptyBucketsFillIn() {
         HystrixMockedTime time = new HystrixMockedTime();
         try {
-            HystrixRollingNumber counter = new HystrixRollingNumber(time, 200, 10);
+            HystrixRollingNumber counter = new HystrixHistogramForCounterHistogramPerMaxRollingNumber(time, 200, 10);
 
             // add 1
             counter.increment(HystrixRollingNumberEvent.SUCCESS);
@@ -116,7 +116,7 @@ public class HystrixRollingNumberTest {
     public void testIncrementInSingleBucket() {
         HystrixMockedTime time = new HystrixMockedTime();
         try {
-            HystrixRollingNumber counter = new HystrixRollingNumber(time, 200, 10);
+            HystrixRollingNumber counter = new HystrixHistogramForCounterHistogramPerMaxRollingNumber(time, 200, 10);
 
             // increment
             counter.increment(HystrixRollingNumberEvent.SUCCESS);
@@ -150,7 +150,7 @@ public class HystrixRollingNumberTest {
     public void testTimeout() {
         HystrixMockedTime time = new HystrixMockedTime();
         try {
-            HystrixRollingNumber counter = new HystrixRollingNumber(time, 200, 10);
+            HystrixRollingNumber counter = new HystrixHistogramForCounterHistogramPerMaxRollingNumber(time, 200, 10);
 
             // increment
             counter.increment(HystrixRollingNumberEvent.TIMEOUT);
@@ -189,7 +189,7 @@ public class HystrixRollingNumberTest {
     public void testShortCircuited() {
         HystrixMockedTime time = new HystrixMockedTime();
         try {
-            HystrixRollingNumber counter = new HystrixRollingNumber(time, 200, 10);
+            HystrixRollingNumber counter = new HystrixHistogramForCounterHistogramPerMaxRollingNumber(time, 200, 10);
 
             // increment
             counter.increment(HystrixRollingNumberEvent.SHORT_CIRCUITED);
@@ -252,7 +252,7 @@ public class HystrixRollingNumberTest {
     private void testCounterType(HystrixRollingNumberEvent type) {
         HystrixMockedTime time = new HystrixMockedTime();
         try {
-            HystrixRollingNumber counter = new HystrixRollingNumber(time, 200, 10);
+            HystrixRollingNumber counter = new HystrixHistogramForCounterHistogramPerMaxRollingNumber(time, 200, 10);
 
             // increment
             counter.increment(type);
@@ -290,7 +290,7 @@ public class HystrixRollingNumberTest {
     public void testIncrementInMultipleBuckets() {
         HystrixMockedTime time = new HystrixMockedTime();
         try {
-            HystrixRollingNumber counter = new HystrixRollingNumber(time, 200, 10);
+            HystrixRollingNumber counter = new HystrixHistogramForCounterHistogramPerMaxRollingNumber(time, 200, 10);
 
             // increment
             counter.increment(HystrixRollingNumberEvent.SUCCESS);
@@ -360,7 +360,7 @@ public class HystrixRollingNumberTest {
     public void testCounterRetrievalRefreshesBuckets() {
         HystrixMockedTime time = new HystrixMockedTime();
         try {
-            HystrixRollingNumber counter = new HystrixRollingNumber(time, 200, 10);
+            HystrixRollingNumber counter = new HystrixHistogramForCounterHistogramPerMaxRollingNumber(time, 200, 10);
 
             // increment
             counter.increment(HystrixRollingNumberEvent.SUCCESS);
@@ -416,7 +416,7 @@ public class HystrixRollingNumberTest {
     public void testUpdateMax1() {
         HystrixMockedTime time = new HystrixMockedTime();
         try {
-            HystrixRollingNumber counter = new HystrixRollingNumber(time, 200, 10);
+            HystrixRollingNumber counter = new HystrixHistogramForCounterHistogramPerMaxRollingNumber(time, 200, 10);
 
             // increment
             counter.updateRollingMax(HystrixRollingNumberEvent.THREAD_MAX_ACTIVE, 10);
@@ -465,7 +465,7 @@ public class HystrixRollingNumberTest {
     public void testUpdateMax2() {
         HystrixMockedTime time = new HystrixMockedTime();
         try {
-            HystrixRollingNumber counter = new HystrixRollingNumber(time, 200, 10);
+            HystrixRollingNumber counter = new HystrixHistogramForCounterHistogramPerMaxRollingNumber(time, 200, 10);
 
             // increment
             counter.updateRollingMax(HystrixRollingNumberEvent.THREAD_MAX_ACTIVE, 10);
@@ -518,7 +518,7 @@ public class HystrixRollingNumberTest {
         try {
             HystrixRollingNumberEvent type = HystrixRollingNumberEvent.THREAD_MAX_ACTIVE;
 
-            HystrixRollingNumber counter = new HystrixRollingNumber(time, 200, 10);
+            HystrixRollingNumber counter = new HystrixHistogramForCounterHistogramPerMaxRollingNumber(time, 200, 10);
 
             counter.updateRollingMax(type, 10);
 
@@ -549,7 +549,7 @@ public class HystrixRollingNumberTest {
     public void testEmptySum() {
         HystrixMockedTime time = new HystrixMockedTime();
         HystrixRollingNumberEvent type = HystrixRollingNumberEvent.COLLAPSED;
-        HystrixRollingNumber counter = new HystrixRollingNumber(time, 200, 10);
+        HystrixRollingNumber counter = new HystrixHistogramForCounterHistogramPerMaxRollingNumber(time, 200, 10);
         assertEquals(0, counter.getRollingSum(type));
     }
 
@@ -557,7 +557,7 @@ public class HystrixRollingNumberTest {
     public void testEmptyMax() {
         HystrixMockedTime time = new HystrixMockedTime();
         HystrixRollingNumberEvent type = HystrixRollingNumberEvent.THREAD_MAX_ACTIVE;
-        HystrixRollingNumber counter = new HystrixRollingNumber(time, 200, 10);
+        HystrixRollingNumber counter = new HystrixHistogramForCounterHistogramPerMaxRollingNumber(time, 200, 10);
         assertEquals(0, counter.getRollingMaxValue(type));
     }
 
@@ -565,7 +565,7 @@ public class HystrixRollingNumberTest {
     public void testEmptyLatestValue() {
         HystrixMockedTime time = new HystrixMockedTime();
         HystrixRollingNumberEvent type = HystrixRollingNumberEvent.THREAD_MAX_ACTIVE;
-        HystrixRollingNumber counter = new HystrixRollingNumber(time, 200, 10);
+        HystrixRollingNumber counter = new HystrixHistogramForCounterHistogramPerMaxRollingNumber(time, 200, 10);
         assertEquals(0, counter.getValueOfLatestBucket(type));
     }
 
@@ -573,7 +573,7 @@ public class HystrixRollingNumberTest {
     public void testRolling() {
         HystrixMockedTime time = new HystrixMockedTime();
         HystrixRollingNumberEvent type = HystrixRollingNumberEvent.THREAD_MAX_ACTIVE;
-        HystrixRollingNumber counter = new HystrixRollingNumber(time, 20, 2);
+        HystrixRollingNumber counter = new HystrixHistogramForCounterHistogramPerMaxRollingNumber(time, 20, 2);
         // iterate over 20 buckets on a queue sized for 2
         for (int i = 0; i < 20; i++) {
             // first bucket
@@ -594,7 +594,7 @@ public class HystrixRollingNumberTest {
     public void testCumulativeCounterAfterRolling() {
         HystrixMockedTime time = new HystrixMockedTime();
         HystrixRollingNumberEvent type = HystrixRollingNumberEvent.SUCCESS;
-        HystrixRollingNumber counter = new HystrixRollingNumber(time, 20, 2);
+        HystrixRollingNumber counter = new HystrixHistogramForCounterHistogramPerMaxRollingNumber(time, 20, 2);
 
         assertEquals(0, counter.getCumulativeSum(type));
 
@@ -622,7 +622,7 @@ public class HystrixRollingNumberTest {
     public void testCumulativeCounterAfterRollingAndReset() {
         HystrixMockedTime time = new HystrixMockedTime();
         HystrixRollingNumberEvent type = HystrixRollingNumberEvent.SUCCESS;
-        HystrixRollingNumber counter = new HystrixRollingNumber(time, 20, 2);
+        HystrixRollingNumber counter = new HystrixHistogramForCounterHistogramPerMaxRollingNumber(time, 20, 2);
 
         assertEquals(0, counter.getCumulativeSum(type));
 
@@ -655,7 +655,7 @@ public class HystrixRollingNumberTest {
     public void testCumulativeCounterAfterRollingAndReset2() {
         HystrixMockedTime time = new HystrixMockedTime();
         HystrixRollingNumberEvent type = HystrixRollingNumberEvent.SUCCESS;
-        HystrixRollingNumber counter = new HystrixRollingNumber(time, 20, 2);
+        HystrixRollingNumber counter = new HystrixHistogramForCounterHistogramPerMaxRollingNumber(time, 20, 2);
 
         assertEquals(0, counter.getCumulativeSum(type));
 
@@ -691,7 +691,7 @@ public class HystrixRollingNumberTest {
     public void testCumulativeCounterAfterRollingAndReset3() {
         HystrixMockedTime time = new HystrixMockedTime();
         HystrixRollingNumberEvent type = HystrixRollingNumberEvent.SUCCESS;
-        HystrixRollingNumber counter = new HystrixRollingNumber(time, 20, 2);
+        HystrixRollingNumber counter = new HystrixHistogramForCounterHistogramPerMaxRollingNumber(time, 20, 2);
 
         assertEquals(0, counter.getCumulativeSum(type));
 

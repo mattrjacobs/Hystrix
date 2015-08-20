@@ -15,14 +15,8 @@
  */
 package com.netflix.hystrix.util;
 
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.locks.ReentrantLock;
-
 import com.netflix.hystrix.util.time.HystrixActualTime;
 import com.netflix.hystrix.util.time.HystrixTime;
-import org.HdrHistogram.Histogram;
-import org.HdrHistogram.Recorder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -57,25 +51,9 @@ import rx.functions.Func0;
  */
 
 //TODO should be HystrixRollingCounter and separate out rollingMax into HystrixRollingMax
-public class HystrixRollingNumber extends HystrixRollingMetrics<HystrixCountersBucket> {
+public abstract class HystrixRollingNumber extends HystrixRollingMetrics<HystrixCountersBucket> {
     @SuppressWarnings("unused")
     private static final Logger logger = LoggerFactory.getLogger(HystrixRollingNumber.class);
-
-    /*
-    * This will get flipped each time a new bucket is created.
-    */
-    //for rolling sum of increments
-    volatile CounterSnapshot currentCounterSnapshot = new CounterSnapshot();
-    //for cumulative sum of increments
-    volatile CounterSnapshot cumulativeCounterSnapshot = new CounterSnapshot();
-    //for writing increments - represents counts by type as a histogram
-    private final Recorder counter = new Recorder(2);
-    private final Histogram partialLatestSnapshot = new Histogram(2);
-    //for writing a multi-valued counter by event
-    private final ConcurrentMap<HystrixRollingNumberEvent, Recorder> writeOnlyDistributions = new ConcurrentHashMap<HystrixRollingNumberEvent, Recorder>();
-    //for reading a multi-valued counter by event
-    //TODO instead of DistributionSnapshot, what about just a long?
-    private final ConcurrentMap<HystrixRollingNumberEvent, DistributionSnapshot> distributionSnapshots = new ConcurrentHashMap<HystrixRollingNumberEvent, DistributionSnapshot>();
 
     /**
      * Construct a counter, with configurable properties for how many buckets, and how long of an interval to track
@@ -107,10 +85,7 @@ public class HystrixRollingNumber extends HystrixRollingMetrics<HystrixCountersB
      * @param type
      *            HystrixRollingNumberEvent defining which counter to increment
      */
-    public void increment(HystrixRollingNumberEvent type) {
-        getCurrentBucket();
-        counter.recordValue(type.ordinal());
-    }
+    public abstract void increment(HystrixRollingNumberEvent type);
 
     /**
      * Add to the counter in the current bucket for the given {@link HystrixRollingNumberEvent} type.
@@ -122,10 +97,7 @@ public class HystrixRollingNumber extends HystrixRollingMetrics<HystrixCountersB
      * @param value
      *            long value to be added to the current bucket
      */
-    public void add(HystrixRollingNumberEvent type, long value) {
-        getCurrentBucket();
-        counter.recordValueWithCount(type.ordinal(), value);
-    }
+    public abstract void add(HystrixRollingNumberEvent type, long value);
 
     /**
      * Update a value and retain the max value.
@@ -135,17 +107,7 @@ public class HystrixRollingNumber extends HystrixRollingMetrics<HystrixCountersB
      * @param type  HystrixRollingNumberEvent defining which counter to retrieve values from
      * @param value long value to be given to the max updater
      */
-    public void updateRollingMax(HystrixRollingNumberEvent type, long value) {
-        getCurrentBucket();
-        Recorder writeOnlyDistribution = writeOnlyDistributions.get(type);
-        if (writeOnlyDistribution == null) {
-            Recorder newRecorder = new Recorder(2);
-            newRecorder.recordValue(value);
-            writeOnlyDistributions.putIfAbsent(type, newRecorder);
-        } else {
-            writeOnlyDistribution.recordValue(value);
-        }
-    }
+    public abstract void updateRollingMax(HystrixRollingNumberEvent type, long value);
 
     /**
      * Get the cumulative sum of all buckets ever since the JVM started without rolling for the given {@link HystrixRollingNumberEvent} type.
@@ -161,10 +123,12 @@ public class HystrixRollingNumber extends HystrixRollingMetrics<HystrixCountersB
         return readValueFromWindow(new Func0<Long>() {
             @Override
             public Long call() {
-                return cumulativeCounterSnapshot.getCount(type);
+                return getCumulativeSumUpToLatestBucket(type) + getValueOfLatestBucket(type);
             }
         }, -1L);
     }
+
+    protected abstract long getCumulativeSumUpToLatestBucket(final HystrixRollingNumberEvent type);
 
     /**
      * Get the sum of all buckets in the rolling counter for the given {@link HystrixRollingNumberEvent} type.
@@ -180,10 +144,12 @@ public class HystrixRollingNumber extends HystrixRollingMetrics<HystrixCountersB
         return readValueFromWindow(new Func0<Long>() {
             @Override
             public Long call() {
-                return currentCounterSnapshot.getCount(type);
+                return getWindowRollingSum(type) + getValueOfLatestBucket(type);
             }
         }, -1L);
     }
+
+    protected abstract long getWindowRollingSum(final HystrixRollingNumberEvent type);
 
     /**
      * Get the value of the latest (current) bucket in the rolling counter for the given {@link HystrixRollingNumberEvent} type.
@@ -195,27 +161,7 @@ public class HystrixRollingNumber extends HystrixRollingMetrics<HystrixCountersB
      * @return
      *         value from latest bucket for given {@link HystrixRollingNumberEvent} counter type
      */
-    //TODO Add documentation - principle is that this method is available, but expensive.  Common calculations (getRollingSum) should
-    //not include it, but it may be done ad-hoc
-    //TODO In some concrete class, this should get added in to make sure we always call it for getRollingSum - it just happens to return 0 in this impl
-    public long getValueOfLatestBucket(HystrixRollingNumberEvent type) {
-        return 0;
-//        readLatestBucketLock.lock();
-//        try {
-//            //acquired the lock
-//            Histogram partialIntervalHistogram;
-//            if (partialHistogramToRecycle != null) {
-//                partialIntervalHistogram = counter.getIntervalHistogram(partialHistogramToRecycle);
-//            } else {
-//                partialIntervalHistogram = counter.getIntervalHistogram();
-//            }
-//            partialLatestSnapshot.add(partialIntervalHistogram);
-//            partialHistogramToRecycle = partialIntervalHistogram;
-//            return partialLatestSnapshot.getCountAtValue(type.ordinal());
-//        } finally {
-//            readLatestBucketLock.unlock();
-//        }
-    }
+    public abstract long getValueOfLatestBucket(HystrixRollingNumberEvent type);
 
     /**
      * Get an array of values for all buckets in the rolling counter for the given {@link HystrixRollingNumberEvent} type.
@@ -228,29 +174,7 @@ public class HystrixRollingNumber extends HystrixRollingMetrics<HystrixCountersB
      */
     //TODO not deprecated, but note that it requires synchronization
     //TODO Add unit test for concurrent reads
-    public long[] getValues(HystrixRollingNumberEvent type) {
-        long[] values = new long[buckets.numBuckets];
-        int i = 0;
-        for (HystrixCountersBucket bucket : buckets) {
-            synchronized(bucket) {
-                if (type.isMaxUpdater()) {
-                    if (bucket.getReadOnlyDistribution(type) != null) {
-                        values[i] = bucket.getReadOnlyDistribution(type).getMaxValue();
-                    } else {
-                        values[i] = 0;
-                    }
-                } else {
-                    if (bucket.histogram != null) {
-                        values[i] = bucket.histogram.getCountAtValue(type.ordinal());
-                    } else {
-                        values[i] = 0;
-                    }
-                }
-            }
-            i++;
-        }
-        return values;
-    }
+    public abstract long[] getValues(HystrixRollingNumberEvent type);
 
     /**
      * Get the max value of values in all buckets for the given {@link HystrixRollingNumberEvent} type.
@@ -261,133 +185,6 @@ public class HystrixRollingNumber extends HystrixRollingMetrics<HystrixCountersB
      *            HystrixRollingNumberEvent defining which "max updater" to retrieve values from
      * @return max value for given {@link HystrixRollingNumberEvent} type during rolling window
      */
-    public long getRollingMaxValue(final HystrixRollingNumberEvent type) {
-        return readValueFromWindow(new Func0<Long>() {
-            @Override
-            public Long call() {
-                if (type.isMaxUpdater()) {
-                    DistributionSnapshot distribution = distributionSnapshots.get(type);
-                    if (distribution == null) {
-                        return 0L;
-                    } else {
-                        return distribution.getMaxValue();
-                    }
-                } else {
-                    return 0L;
-                }
-            }
-        }, -1L);
-
-    }
-
-    @Override
-    protected HystrixCountersBucket getNewBucket(long startTime, HystrixCountersBucket bucketToRecycle) {
-        //System.out.println("getNewBucket : " + startTime + ", recycling : " + bucketToRecycle);
-        HystrixCountersBucket mostRecentBucket = buckets.peekLast();
-        if (mostRecentBucket != null) {
-            //we should create a new histogram
-            if (bucketToRecycle != null) {
-                //we can recycle the old histograms
-                mostRecentBucket.histogram = counter.getIntervalHistogram(bucketToRecycle.histogram);
-                for (HystrixRollingNumberEvent eventType: HystrixRollingNumberEvent.values()) {
-                    Histogram toRecycle = bucketToRecycle.getReadOnlyDistribution(eventType);
-                    Recorder writeOnlyDistribution = writeOnlyDistributions.get(eventType);
-                    if (writeOnlyDistribution == null) {
-                        mostRecentBucket.setReadOnlyDistribution(eventType, new Histogram(1));
-                    } else {
-                        Histogram refreshedHistogram = writeOnlyDistribution.getIntervalHistogram(toRecycle);
-                        mostRecentBucket.setReadOnlyDistribution(eventType, refreshedHistogram);
-                    }
-                }
-            } else {
-                //we will allocate a new one
-                mostRecentBucket.histogram = counter.getIntervalHistogram();
-                for (HystrixRollingNumberEvent eventType: HystrixRollingNumberEvent.values()) {
-                    Recorder writeOnlyDistribution = writeOnlyDistributions.get(eventType);
-                    if (writeOnlyDistribution == null) {
-                        mostRecentBucket.setReadOnlyDistribution(eventType, new Histogram(1));
-                    } else {
-                        Histogram newReadOnlyDistribution = writeOnlyDistribution.getIntervalHistogram();
-                        mostRecentBucket.setReadOnlyDistribution(eventType, newReadOnlyDistribution);
-                    }
-                }
-            }
-            //System.out.println("Assigning current recorder value to : " + mostRecentBucket);
-        }
-        HystrixCountersBucket newBucket = new HystrixCountersBucket(startTime);
-        //System.out.println("created bucket : " + newBucket + " @ " + startTime);
-        return newBucket;
-    }
-
-    @Override
-    protected void rollInternalDataStructures(BucketCircularArray buckets, HystrixCountersBucket lastFullBucket) {
-        // we created a new bucket so let's re-generate the CounterSnapshot (not including the new bucket)
-        currentCounterSnapshot = new CounterSnapshot(buckets);
-        if (lastFullBucket != null) {
-            cumulativeCounterSnapshot.add(lastFullBucket);
-        }
-        for (HystrixRollingNumberEvent eventType: HystrixRollingNumberEvent.values()) {
-            if (eventType.isMaxUpdater()) {
-                DistributionSnapshot newDistributionSnapshot = new DistributionSnapshot(buckets, eventType);
-                //System.out.println("New distributionSnapshot : " + newDistributionSnapshot + " : " + newDistributionSnapshot.getMaxValue());
-                distributionSnapshots.put(eventType, newDistributionSnapshot);
-            }
-        }
-        partialLatestSnapshot.reset();
-    }
-
-    /* package for testing */ static class CounterSnapshot {
-        //TODO can i save on allocation by doing a subtract and add
-        private final Long[] counter = new Long[HystrixRollingNumberEvent.values().length]; //represents counters per event, indexed by eventType.ordinal
-
-        /* package for testing */ CounterSnapshot(final BucketCircularArray buckets) {
-            this();
-            for (HystrixCountersBucket bucket: buckets) {
-                if (bucket.histogram != null) {
-                    //System.out.println("Bucket @ " + bucket.windowStart + " has non-null histogram : " + bucket.histogram);
-                    for (HystrixRollingNumberEvent eventType: HystrixRollingNumberEvent.values()) {
-                        int eventOrdinal = eventType.ordinal();
-                        counter[eventOrdinal] += (int) bucket.histogram.getCountAtValue(eventOrdinal);
-                    }
-                } else {
-                    //System.out.println("Bucket @ " + bucket.windowStart + " has null histogram : " + bucket.histogram);
-                }
-            }
-        }
-
-        CounterSnapshot() {
-            for (int i = 0; i < counter.length; i++) {
-                counter[i] = 0L;
-            }
-        }
-
-        public long getCount(HystrixRollingNumberEvent eventType) {
-            return counter[eventType.ordinal()];
-        }
-
-        public void add(HystrixCountersBucket bucket) {
-            Histogram newHistogram = bucket.histogram;
-            //System.out.println("Add bucket @ " + bucket.windowStart + " : " + bucket.histogram);
-            for (int i = 0; i < counter.length; i++) {
-                counter[i] = counter[i] + newHistogram.getCountAtValue(i);
-            }
-        }
-    }
-
-    static class DistributionSnapshot {
-        private Long maxValue = -1L;
-
-        DistributionSnapshot(final BucketCircularArray buckets, final HystrixRollingNumberEvent eventType) {
-            for (HystrixCountersBucket bucket: buckets) {
-                long maxPerBucket = bucket.getReadOnlyDistribution(eventType).getMaxValue();
-                if (maxPerBucket > maxValue) {
-                    maxValue = maxPerBucket;
-                }
-            }
-        }
-
-        public long getMaxValue() {
-            return maxValue;
-        }
-    }
+    //TODO do I care about recency of rolling max and want to possibly include latest bucket?
+    public abstract long getRollingMaxValue(final HystrixRollingNumberEvent type);
 }

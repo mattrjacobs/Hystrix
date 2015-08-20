@@ -18,6 +18,7 @@ package com.netflix.hystrix.strategy.metrics;
 import com.netflix.hystrix.HystrixCollapserKey;
 import com.netflix.hystrix.HystrixCollapserMetrics;
 import com.netflix.hystrix.HystrixCollapserProperties;
+import com.netflix.hystrix.util.HystrixHistogramForCounterHistogramPerMaxRollingNumber;
 import com.netflix.hystrix.util.HystrixRollingNumber;
 import com.netflix.hystrix.util.HystrixRollingNumberEvent;
 import com.netflix.hystrix.util.HystrixRollingPercentile;
@@ -45,7 +46,7 @@ public class HystrixCollapserMetricsSummary extends HystrixCollapserMetrics {
 
     /* package */HystrixCollapserMetricsSummary(HystrixCollapserKey key, HystrixCollapserProperties properties, HystrixTime time) {
         super(key, properties);
-        this.counter = new HystrixRollingNumber(time, properties.metricsRollingStatisticalWindowInMilliseconds().get(), properties.metricsRollingStatisticalWindowBuckets().get());
+        this.counter = new HystrixHistogramForCounterHistogramPerMaxRollingNumber(time, properties.metricsRollingStatisticalWindowInMilliseconds().get(), properties.metricsRollingStatisticalWindowBuckets().get());
         this.percentileBatchSize = new HystrixRollingPercentile(properties.metricsRollingPercentileWindowInMilliseconds().get(), properties.metricsRollingPercentileWindowBuckets().get(), properties.metricsRollingPercentileBucketSize().get(), properties.metricsRollingPercentileEnabled());
         this.percentileShardSize = new HystrixRollingPercentile(properties.metricsRollingPercentileWindowInMilliseconds().get(), properties.metricsRollingPercentileWindowBuckets().get(), properties.metricsRollingPercentileBucketSize().get(), properties.metricsRollingPercentileEnabled());
     }
