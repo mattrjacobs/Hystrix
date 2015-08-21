@@ -15,7 +15,10 @@
  */
 package com.netflix.hystrix.perf;
 
+import com.netflix.hystrix.util.HystrixAtomicLongArrayRollingNumber;
 import com.netflix.hystrix.util.HystrixHistogramForCounterHistogramPerMaxRollingNumber;
+import com.netflix.hystrix.util.HystrixHistogramForCounterLongPerMaxRollingNumber;
+import com.netflix.hystrix.util.HystrixLongAdderArrayRollingNumber;
 import com.netflix.hystrix.util.HystrixRollingNumber;
 import com.netflix.hystrix.util.HystrixRollingNumberEvent;
 import org.openjdk.jmh.annotations.Benchmark;
@@ -25,6 +28,7 @@ import org.openjdk.jmh.annotations.GroupThreads;
 import org.openjdk.jmh.annotations.Level;
 import org.openjdk.jmh.annotations.Mode;
 import org.openjdk.jmh.annotations.OutputTimeUnit;
+import org.openjdk.jmh.annotations.Param;
 import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
@@ -37,9 +41,28 @@ public class RollingMaxPerfTest {
     public static class CounterState {
         HystrixRollingNumber counter;
 
+        @Param({"DoubleHistogram", "HistogramCounterLongMax", "LongAdder", "AtomicLong"})
+        public String rollingNumberType;
+
+        @Param({"1000", "10000"})
+        public int windowSize;
+
+        @Param({"10", "100", "250"})
+        public int numberOfBuckets;
+
         @Setup(Level.Iteration)
         public void setUp() {
-            counter = new HystrixHistogramForCounterHistogramPerMaxRollingNumber(100, 10);
+            if (rollingNumberType.equals("DoubleHistogram")) {
+                counter = new HystrixHistogramForCounterHistogramPerMaxRollingNumber(windowSize, numberOfBuckets);
+            } else if (rollingNumberType.equals("HistogramCounterLongMax")) {
+                counter = new HystrixHistogramForCounterLongPerMaxRollingNumber(windowSize, numberOfBuckets);
+            } else if (rollingNumberType.equals("LongAdder")) {
+                counter = new HystrixLongAdderArrayRollingNumber(windowSize, numberOfBuckets);
+            } else if (rollingNumberType.equals("AtomicLong")) {
+                counter = new HystrixAtomicLongArrayRollingNumber(windowSize, numberOfBuckets);
+            } else {
+                throw new IllegalStateException("bad rollingNumber type : " + rollingNumberType);
+            }
         }
     }
 
