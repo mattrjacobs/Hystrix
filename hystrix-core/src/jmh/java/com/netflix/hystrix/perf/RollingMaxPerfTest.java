@@ -15,6 +15,8 @@
  */
 package com.netflix.hystrix.perf;
 
+import com.netflix.hystrix.util.HystrixAtomicLongArrayNoHotReadsCachedSnapshotsRollingNumber;
+import com.netflix.hystrix.util.HystrixAtomicLongArrayNoHotReadsRollingNumber;
 import com.netflix.hystrix.util.HystrixAtomicLongArrayRollingNumber;
 import com.netflix.hystrix.util.HystrixHistogramForCounterHistogramPerMaxRollingNumber;
 import com.netflix.hystrix.util.HystrixHistogramForCounterLongPerMaxRollingNumber;
@@ -32,6 +34,7 @@ import org.openjdk.jmh.annotations.Param;
 import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
+import org.openjdk.jmh.infra.Blackhole;
 
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
@@ -41,7 +44,7 @@ public class RollingMaxPerfTest {
     public static class CounterState {
         HystrixRollingNumber counter;
 
-        @Param({"DoubleHistogram", "HistogramCounterLongMax", "LongAdder", "AtomicLong"})
+        @Param({"DoubleHistogram", "HistogramCounterLongMax", "LongAdder", "AtomicLong", "AtomicLongNoHotRead", "AtomicLongCached"})
         public String rollingNumberType;
 
         @Param({"1000"})
@@ -60,6 +63,10 @@ public class RollingMaxPerfTest {
                 counter = new HystrixLongAdderArrayRollingNumber(windowSize, numberOfBuckets);
             } else if (rollingNumberType.equals("AtomicLong")) {
                 counter = new HystrixAtomicLongArrayRollingNumber(windowSize, numberOfBuckets);
+            } else if (rollingNumberType.equals("AtomicLongNoHotRead")) {
+                counter = new HystrixAtomicLongArrayNoHotReadsRollingNumber(windowSize, numberOfBuckets);
+            } else if (rollingNumberType.equals("AtomicLongCached")) {
+                counter = new HystrixAtomicLongArrayNoHotReadsCachedSnapshotsRollingNumber(windowSize, numberOfBuckets);
             } else {
                 throw new IllegalStateException("bad rollingNumber type : " + rollingNumberType);
             }
@@ -83,6 +90,7 @@ public class RollingMaxPerfTest {
     @OutputTimeUnit(TimeUnit.MILLISECONDS)
     public HystrixRollingNumber writeOnly(CounterState counterState, ValueState valueState) {
         counterState.counter.updateRollingMax(HystrixRollingNumberEvent.COMMAND_MAX_ACTIVE, valueState.value);
+        Blackhole.consumeCPU(1000);
         return counterState.counter;
     }
 
@@ -91,6 +99,7 @@ public class RollingMaxPerfTest {
     @OutputTimeUnit(TimeUnit.MILLISECONDS)
     public long readOnly(CounterState counterState) {
         HystrixRollingNumber counter = counterState.counter;
+        Blackhole.consumeCPU(1000);
         return counter.getRollingMaxValue(HystrixRollingNumberEvent.COMMAND_MAX_ACTIVE);
     }
 
@@ -101,6 +110,7 @@ public class RollingMaxPerfTest {
     @OutputTimeUnit(TimeUnit.MILLISECONDS)
     public HystrixRollingNumber writeHeavyUpdateMax(CounterState counterState, ValueState valueState) {
         counterState.counter.updateRollingMax(HystrixRollingNumberEvent.COMMAND_MAX_ACTIVE, valueState.value);
+        Blackhole.consumeCPU(1000);
         return counterState.counter;
     }
 
@@ -111,6 +121,7 @@ public class RollingMaxPerfTest {
     @OutputTimeUnit(TimeUnit.MILLISECONDS)
     public long writeHeavyReadMetrics(CounterState counterState) {
         HystrixRollingNumber counter = counterState.counter;
+        Blackhole.consumeCPU(1000);
         return counter.getRollingMaxValue(HystrixRollingNumberEvent.COMMAND_MAX_ACTIVE);
     }
 
@@ -121,6 +132,7 @@ public class RollingMaxPerfTest {
     @OutputTimeUnit(TimeUnit.MILLISECONDS)
     public HystrixRollingNumber evenSplitUpdateMax(CounterState counterState, ValueState valueState) {
         counterState.counter.updateRollingMax(HystrixRollingNumberEvent.COMMAND_MAX_ACTIVE, valueState.value);
+        Blackhole.consumeCPU(1000);
         return counterState.counter;
     }
 
@@ -131,6 +143,7 @@ public class RollingMaxPerfTest {
     @OutputTimeUnit(TimeUnit.MILLISECONDS)
     public long evenSplitReadMetrics(CounterState counterState) {
         HystrixRollingNumber counter = counterState.counter;
+        Blackhole.consumeCPU(1000);
         return counter.getRollingMaxValue(HystrixRollingNumberEvent.COMMAND_MAX_ACTIVE);
     }
 
@@ -141,6 +154,7 @@ public class RollingMaxPerfTest {
     @OutputTimeUnit(TimeUnit.MILLISECONDS)
     public HystrixRollingNumber readHeavyUpdateMax(CounterState counterState, ValueState valueState) {
         counterState.counter.updateRollingMax(HystrixRollingNumberEvent.COMMAND_MAX_ACTIVE, valueState.value);
+        Blackhole.consumeCPU(1000);
         return counterState.counter;
     }
 
@@ -151,6 +165,7 @@ public class RollingMaxPerfTest {
     @OutputTimeUnit(TimeUnit.MILLISECONDS)
     public long readHeavyReadMetrics(CounterState counterState) {
         HystrixRollingNumber counter = counterState.counter;
+        Blackhole.consumeCPU(1000);
         return counter.getRollingMaxValue(HystrixRollingNumberEvent.COMMAND_MAX_ACTIVE);
     }
 }

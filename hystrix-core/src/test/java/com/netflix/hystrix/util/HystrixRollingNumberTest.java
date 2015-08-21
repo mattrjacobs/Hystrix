@@ -37,6 +37,8 @@ public class HystrixRollingNumberTest {
         counterSubclasses.add(HystrixLongAdderArrayRollingNumber.class);
         counterSubclasses.add(HystrixHistogramForCounterLongPerMaxRollingNumber.class);
         counterSubclasses.add(HystrixHistogramForCounterHistogramPerMaxRollingNumber.class);
+        counterSubclasses.add(HystrixAtomicLongArrayNoHotReadsCachedSnapshotsRollingNumber.class);
+        counterSubclasses.add(HystrixAtomicLongArrayNoHotReadsRollingNumber.class);
     }
 
     private void testAllSubclasses(final Action2<HystrixRollingNumber, HystrixMockedTime> unitTest) {

@@ -36,12 +36,13 @@ jar {
 }
 
 jmh {
-	fork = 10
-	iterations = 5
+	fork = 3
+	iterations = 2
 	jmhVersion = '1.10.3'
 	profilers = ['gc']
 	threads = 8
 	warmup = '1s'
 	warmupBatchSize = 1
 	warmupIterations = 5
+	include = '.*Rolling.*'
 }
