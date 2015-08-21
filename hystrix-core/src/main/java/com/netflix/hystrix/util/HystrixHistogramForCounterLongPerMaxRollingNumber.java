@@ -96,6 +96,10 @@ public class HystrixHistogramForCounterLongPerMaxRollingNumber extends HystrixRo
     //TODO was not public in 1.4, should not be public in 1.5
     public HystrixHistogramForCounterLongPerMaxRollingNumber(HystrixTime time, int timeInMilliseconds, int numberOfBuckets) {
         super(time, timeInMilliseconds, numberOfBuckets);
+
+        for (HystrixRollingNumberEvent event: HystrixRollingNumberEvent.values()) {
+            maxSnapshots.put(event, 0L);
+        }
     }
 
     /**

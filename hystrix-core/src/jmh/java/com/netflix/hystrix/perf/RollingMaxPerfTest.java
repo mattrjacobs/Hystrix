@@ -44,10 +44,10 @@ public class RollingMaxPerfTest {
         @Param({"DoubleHistogram", "HistogramCounterLongMax", "LongAdder", "AtomicLong"})
         public String rollingNumberType;
 
-        @Param({"1000", "10000"})
+        @Param({"1000"})
         public int windowSize;
 
-        @Param({"10", "100", "250"})
+        @Param({"10"})
         public int numberOfBuckets;
 
         @Setup(Level.Iteration)

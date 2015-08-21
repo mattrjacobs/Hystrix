@@ -40,9 +40,16 @@ public class RollingPercentilePerfTest {
 		@Param({"true", "false"})
 		public boolean percentileEnabled;
 
+		@Param({"1000", "10000"})
+		public int windowSize;
+
+		@Param({"10", "100", "250"})
+		public int numberOfBuckets;
+
+
 		@Setup(Level.Iteration)
 		public void setUp() {
-			percentile = new HystrixRollingPercentile(100, 10, 1000, HystrixProperty.Factory.asProperty(percentileEnabled));
+			percentile = new HystrixRollingPercentile(windowSize, numberOfBuckets, 1000, HystrixProperty.Factory.asProperty(percentileEnabled));
 		}
 	}
 
