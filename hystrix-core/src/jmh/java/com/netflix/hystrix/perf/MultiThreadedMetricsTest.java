@@ -31,6 +31,7 @@ import org.openjdk.jmh.annotations.Param;
 import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
+import org.openjdk.jmh.infra.Blackhole;
 
 import java.util.concurrent.TimeUnit;
 
@@ -42,6 +43,8 @@ public class MultiThreadedMetricsTest {
         @Param({"THREAD", "SEMAPHORE"})
         public HystrixCommandProperties.ExecutionIsolationStrategy isolationStrategy;
 
+        @Param({"1", "1000", "1000000"})
+        public int blackholeAmount;
 
         @Setup(Level.Invocation)
         public void setUp() {
@@ -62,6 +65,7 @@ public class MultiThreadedMetricsTest {
             ) {
                 @Override
                 protected Integer run() throws Exception {
+                    Blackhole.consumeCPU(blackholeAmount);
                     return 1;
                 }
 

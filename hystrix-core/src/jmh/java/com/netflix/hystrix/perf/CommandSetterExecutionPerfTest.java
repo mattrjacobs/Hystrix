@@ -31,7 +31,9 @@ import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.TearDown;
+import org.openjdk.jmh.infra.Blackhole;
 import rx.Observable;
+import rx.functions.Func0;
 import rx.schedulers.Schedulers;
 
 import java.util.List;
@@ -53,6 +55,8 @@ public class CommandSetterExecutionPerfTest {
         @Param({"THREAD", "SEMAPHORE"})
         public HystrixCommandProperties.ExecutionIsolationStrategy isolationStrategy;
 
+        @Param({"1", "1000", "1000000"})
+        public int blackholeAmount;
 
         @Setup(Level.Invocation)
         public void setUp() {
@@ -73,6 +77,7 @@ public class CommandSetterExecutionPerfTest {
             ) {
                 @Override
                 protected Integer run() throws Exception {
+                    Blackhole.consumeCPU(blackholeAmount);
                     return 1;
                 }
 
@@ -120,18 +125,20 @@ public class CommandSetterExecutionPerfTest {
     @Benchmark
     @BenchmarkMode({Mode.Throughput})
     @OutputTimeUnit(TimeUnit.MILLISECONDS)
-    public Integer baselineExecute() {
+    public Integer baselineExecute(CommandState commandState) {
+        Blackhole.consumeCPU(commandState.blackholeAmount);
         return 1;
     }
 
     @Benchmark
     @BenchmarkMode({Mode.Throughput})
     @OutputTimeUnit(TimeUnit.MILLISECONDS)
-    public Integer baselineQueue(ExecutorState state) throws InterruptedException, ExecutionException{
+    public Integer baselineQueue(final CommandState commandState, ExecutorState state) throws InterruptedException, ExecutionException{
         try {
             return state.executorService.submit(new Callable<Integer>() {
                 @Override
                 public Integer call() throws Exception {
+                    Blackhole.consumeCPU(commandState.blackholeAmount);
                     return 1;
                 }
             }).get();
@@ -143,8 +150,14 @@ public class CommandSetterExecutionPerfTest {
     @Benchmark
     @BenchmarkMode({Mode.Throughput})
     @OutputTimeUnit(TimeUnit.MILLISECONDS)
-    public Integer baselineSyncObserve() throws InterruptedException {
-        Observable<Integer> syncObservable = Observable.just(1);
+    public Integer baselineSyncObserve(final CommandState commandState) throws InterruptedException {
+        Observable<Integer> syncObservable = Observable.defer(new Func0<Observable<Integer>>() {
+            @Override
+            public Observable<Integer> call() {
+                Blackhole.consumeCPU(commandState.blackholeAmount);
+                return Observable.just(1);
+            }
+        });
 
         try {
             return syncObservable.toBlocking().first();
@@ -156,8 +169,14 @@ public class CommandSetterExecutionPerfTest {
     @Benchmark
     @BenchmarkMode({Mode.Throughput})
     @OutputTimeUnit(TimeUnit.MILLISECONDS)
-    public Integer baselineAsyncComputationObserve() throws InterruptedException {
-        Observable<Integer> asyncObservable = Observable.just(1).subscribeOn(Schedulers.computation());
+    public Integer baselineAsyncComputationObserve(final CommandState commandState) throws InterruptedException {
+        Observable<Integer> asyncObservable = Observable.defer(new Func0<Observable<Integer>>() {
+            @Override
+            public Observable<Integer> call() {
+                Blackhole.consumeCPU(commandState.blackholeAmount);
+                return Observable.just(1);
+            }
+        }).subscribeOn(Schedulers.computation());
 
         try {
             return asyncObservable.toBlocking().first();
@@ -169,8 +188,15 @@ public class CommandSetterExecutionPerfTest {
     @Benchmark
     @BenchmarkMode({Mode.Throughput})
     @OutputTimeUnit(TimeUnit.MILLISECONDS)
-    public Integer baselineAsyncCustomThreadPoolObserve(ThreadPoolState state) {
-        Observable<Integer> asyncObservable = Observable.just(1).subscribeOn(state.hystrixThreadPool.getScheduler());
+    public Integer baselineAsyncCustomThreadPoolObserve(final CommandState commandState, ThreadPoolState state) {
+        Observable<Integer> asyncObservable = Observable.defer(new Func0<Observable<Integer>>() {
+            @Override
+            public Observable<Integer> call() {
+                Blackhole.consumeCPU(commandState.blackholeAmount);
+                return Observable.just(1);
+            }
+        }).subscribeOn(state.hystrixThreadPool.getScheduler());
+
         try {
             return asyncObservable.toBlocking().first();
         } catch (Throwable t) {

@@ -17,7 +17,6 @@ package com.netflix.hystrix.perf;
 
 import com.netflix.hystrix.HystrixCommand;
 import com.netflix.hystrix.HystrixCommandGroupKey;
-import com.netflix.hystrix.HystrixCommandProperties;
 import com.netflix.hystrix.HystrixThreadPool;
 import com.netflix.hystrix.HystrixThreadPoolKey;
 import com.netflix.hystrix.HystrixThreadPoolProperties;
@@ -31,7 +30,9 @@ import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.TearDown;
+import org.openjdk.jmh.infra.Blackhole;
 import rx.Observable;
+import rx.functions.Func0;
 import rx.schedulers.Schedulers;
 
 import java.util.List;
@@ -47,13 +48,17 @@ public class CommandGroupKeyExecutionPerfTest {
     public static class CommandState {
         HystrixCommand<Integer> command;
 
-        static class TestCommand extends HystrixCommand<Integer> {
+        @Param({"1", "1000", "1000000"})
+        public int blackholeAmount;
+
+        class TestCommand extends HystrixCommand<Integer> {
             TestCommand() {
                 super(HystrixCommandGroupKey.Factory.asKey("PERF"));
             }
 
             @Override
             protected Integer run() throws Exception {
+                Blackhole.consumeCPU(blackholeAmount);
                 return 1;
             }
 
@@ -105,18 +110,20 @@ public class CommandGroupKeyExecutionPerfTest {
     @Benchmark
     @BenchmarkMode({Mode.Throughput})
     @OutputTimeUnit(TimeUnit.MILLISECONDS)
-    public Integer baselineExecute() {
+    public Integer baselineExecute(CommandState commandState) {
+        Blackhole.consumeCPU(commandState.blackholeAmount);
         return 1;
     }
 
     @Benchmark
     @BenchmarkMode({Mode.Throughput})
     @OutputTimeUnit(TimeUnit.MILLISECONDS)
-    public Integer baselineQueue(ExecutorState state) throws InterruptedException, ExecutionException{
+    public Integer baselineQueue(final CommandState commandState, ExecutorState executorState) throws InterruptedException, ExecutionException{
         try {
-            return state.executorService.submit(new Callable<Integer>() {
+            return executorState.executorService.submit(new Callable<Integer>() {
                 @Override
                 public Integer call() throws Exception {
+                    Blackhole.consumeCPU(commandState.blackholeAmount);
                     return 1;
                 }
             }).get();
@@ -128,8 +135,14 @@ public class CommandGroupKeyExecutionPerfTest {
     @Benchmark
     @BenchmarkMode({Mode.Throughput})
     @OutputTimeUnit(TimeUnit.MILLISECONDS)
-    public Integer baselineSyncObserve() throws InterruptedException {
-        Observable<Integer> syncObservable = Observable.just(1);
+    public Integer baselineSyncObserve(final CommandState commandState) throws InterruptedException {
+        Observable<Integer> syncObservable = Observable.defer(new Func0<Observable<Integer>>() {
+            @Override
+            public Observable<Integer> call() {
+                Blackhole.consumeCPU(commandState.blackholeAmount);
+                return Observable.just(1);
+            }
+        });
 
         try {
             return syncObservable.toBlocking().first();
@@ -141,8 +154,14 @@ public class CommandGroupKeyExecutionPerfTest {
     @Benchmark
     @BenchmarkMode({Mode.Throughput})
     @OutputTimeUnit(TimeUnit.MILLISECONDS)
-    public Integer baselineAsyncComputationObserve() throws InterruptedException {
-        Observable<Integer> asyncObservable = Observable.just(1).subscribeOn(Schedulers.computation());
+    public Integer baselineAsyncComputationObserve(final CommandState commandState) throws InterruptedException {
+        Observable<Integer> asyncObservable = Observable.defer(new Func0<Observable<Integer>>() {
+            @Override
+            public Observable<Integer> call() {
+                Blackhole.consumeCPU(commandState.blackholeAmount);
+                return Observable.just(1);
+            }
+        }).subscribeOn(Schedulers.computation());
 
         try {
             return asyncObservable.toBlocking().first();
@@ -154,9 +173,17 @@ public class CommandGroupKeyExecutionPerfTest {
     @Benchmark
     @BenchmarkMode({Mode.Throughput})
     @OutputTimeUnit(TimeUnit.MILLISECONDS)
-    public Integer baselineAsyncCustomThreadPoolObserve(ThreadPoolState state) {
-        Observable<Integer> asyncObservable = Observable.just(1).subscribeOn(state.hystrixThreadPool.getScheduler());
+    public Integer baselineAsyncCustomThreadPoolObserve(final CommandState commandState, ThreadPoolState state) {
+        Observable<Integer> asyncObservable = Observable.defer(new Func0<Observable<Integer>>() {
+            @Override
+            public Observable<Integer> call() {
+                Blackhole.consumeCPU(commandState.blackholeAmount);
+                return Observable.just(1);
+            }
+        }).subscribeOn(state.hystrixThreadPool.getScheduler());
+
         try {
+            Blackhole.consumeCPU(commandState.blackholeAmount);
             return asyncObservable.toBlocking().first();
         } catch (Throwable t) {
             return 2;
@@ -166,16 +193,16 @@ public class CommandGroupKeyExecutionPerfTest {
     @Benchmark
     @BenchmarkMode({Mode.Throughput})
     @OutputTimeUnit(TimeUnit.MILLISECONDS)
-    public Integer hystrixExecute(CommandState state) {
-        return state.command.execute();
+    public Integer hystrixExecute(CommandState commandState) {
+        return commandState.command.execute();
     }
 
     @Benchmark
     @BenchmarkMode({Mode.Throughput})
     @OutputTimeUnit(TimeUnit.MILLISECONDS)
-    public Integer hystrixQueue(CommandState state) {
+    public Integer hystrixQueue(CommandState commandState) {
         try {
-            return state.command.queue().get();
+            return commandState.command.queue().get();
         } catch (Throwable t) {
             return 2;
         }
@@ -184,14 +211,14 @@ public class CommandGroupKeyExecutionPerfTest {
     @Benchmark
     @BenchmarkMode({Mode.Throughput})
     @OutputTimeUnit(TimeUnit.MILLISECONDS)
-    public Integer hystrixObserve(CommandState state) {
-        return state.command.observe().toBlocking().first();
+    public Integer hystrixObserve(CommandState commandState) {
+        return commandState.command.observe().toBlocking().first();
     }
 
     @Benchmark
     @BenchmarkMode({Mode.Throughput})
     @OutputTimeUnit(TimeUnit.MILLISECONDS)
-    public Integer hystrixToObservable(CommandState state) {
-        return state.command.toObservable().toBlocking().first();
+    public Integer hystrixToObservable(CommandState commandState) {
+        return commandState.command.toObservable().toBlocking().first();
     }
 }

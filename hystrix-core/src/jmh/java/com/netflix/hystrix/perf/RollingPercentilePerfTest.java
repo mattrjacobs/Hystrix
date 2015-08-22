@@ -28,6 +28,7 @@ import org.openjdk.jmh.annotations.Param;
 import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
+import org.openjdk.jmh.infra.Blackhole;
 
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
@@ -37,12 +38,24 @@ public class RollingPercentilePerfTest {
 	public static class PercentileState {
 		HystrixRollingPercentile percentile;
 
-		@Param({"true", "false"})
+		//@Param({"true", "false"})
+		@Param({"true"})
 		public boolean percentileEnabled;
+
+		//@Param({"1000", "10000"})
+		@Param({"1000"})
+        public int windowSize;
+
+		//@Param({"10", "100", "250"})
+		@Param({"10"})
+        public int numberOfBuckets;
+
+        @Param({"1", "1000", "1000000"})
+        public int blackholeAmount;
 
 		@Setup(Level.Iteration)
 		public void setUp() {
-			percentile = new HystrixRollingPercentile(100, 10, 1000, HystrixProperty.Factory.asProperty(percentileEnabled));
+			percentile = new HystrixRollingPercentile(windowSize, numberOfBuckets, 1000, HystrixProperty.Factory.asProperty(percentileEnabled));
 		}
 	}
 
@@ -63,6 +76,7 @@ public class RollingPercentilePerfTest {
 	@OutputTimeUnit(TimeUnit.MILLISECONDS)
 	public HystrixRollingPercentile writeOnly(PercentileState percentileState, LatencyState latencyState) {
 		percentileState.percentile.addValue(latencyState.latency);
+        Blackhole.consumeCPU(percentileState.blackholeAmount);
 		return percentileState.percentile;
 	}
 
@@ -71,6 +85,7 @@ public class RollingPercentilePerfTest {
 	@OutputTimeUnit(TimeUnit.MILLISECONDS)
 	public int readOnly(PercentileState percentileState) {
 		HystrixRollingPercentile percentile = percentileState.percentile;
+        Blackhole.consumeCPU(percentileState.blackholeAmount);
 		return percentile.getMean() +
 				percentile.getPercentile(10) +
 				percentile.getPercentile(25) +
@@ -89,6 +104,7 @@ public class RollingPercentilePerfTest {
 	@OutputTimeUnit(TimeUnit.MILLISECONDS)
 	public HystrixRollingPercentile writeHeavyLatencyAdd(PercentileState percentileState, LatencyState latencyState) {
 		percentileState.percentile.addValue(latencyState.latency);
+        Blackhole.consumeCPU(percentileState.blackholeAmount);
 		return percentileState.percentile;
 	}
 
@@ -99,6 +115,7 @@ public class RollingPercentilePerfTest {
 	@OutputTimeUnit(TimeUnit.MILLISECONDS)
 	public int writeHeavyReadMetrics(PercentileState percentileState) {
 		HystrixRollingPercentile percentile = percentileState.percentile;
+        Blackhole.consumeCPU(percentileState.blackholeAmount);
 		return percentile.getMean() +
 				percentile.getPercentile(10) +
 				percentile.getPercentile(25) +
@@ -117,6 +134,7 @@ public class RollingPercentilePerfTest {
 	@OutputTimeUnit(TimeUnit.MILLISECONDS)
 	public HystrixRollingPercentile evenSplitLatencyAdd(PercentileState percentileState, LatencyState latencyState) {
 		percentileState.percentile.addValue(latencyState.latency);
+        Blackhole.consumeCPU(percentileState.blackholeAmount);
 		return percentileState.percentile;
 	}
 
@@ -127,6 +145,7 @@ public class RollingPercentilePerfTest {
 	@OutputTimeUnit(TimeUnit.MILLISECONDS)
 	public int evenSplitReadMetrics(PercentileState percentileState) {
 		HystrixRollingPercentile percentile = percentileState.percentile;
+        Blackhole.consumeCPU(percentileState.blackholeAmount);
 		return percentile.getMean() +
 				percentile.getPercentile(10) +
 				percentile.getPercentile(25) +
@@ -145,6 +164,7 @@ public class RollingPercentilePerfTest {
 	@OutputTimeUnit(TimeUnit.MILLISECONDS)
 	public HystrixRollingPercentile readHeavyLatencyAdd(PercentileState percentileState, LatencyState latencyState) {
 		percentileState.percentile.addValue(latencyState.latency);
+        Blackhole.consumeCPU(percentileState.blackholeAmount);
 		return percentileState.percentile;
 	}
 
@@ -155,6 +175,7 @@ public class RollingPercentilePerfTest {
 	@OutputTimeUnit(TimeUnit.MILLISECONDS)
 	public int readHeavyReadMetrics(PercentileState percentileState) {
 		HystrixRollingPercentile percentile = percentileState.percentile;
+        Blackhole.consumeCPU(percentileState.blackholeAmount);
 		return percentile.getMean() +
 				percentile.getPercentile(10) +
 				percentile.getPercentile(25) +
