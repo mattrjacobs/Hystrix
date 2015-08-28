@@ -3537,6 +3537,39 @@ public class HystrixCommandTest extends CommonHystrixCommandTests<TestHystrixCom
 
     }
 
+    @Test
+    public void testSemaphoreExecutionWithTimeoutAndFallback() {
+        //This demonstrates a sempahore command that sleeps for 2000ms, with a timeout of 100ms.  It has a fallback, so timeout should fire and execution time should be less than 2000ms.
+        final int LATENCY = 2000;
+        TestHystrixCommand<Boolean> cmd = new InterruptibleCommandWithFallback(new TestCircuitBreaker(), false, LATENCY);
+
+        System.out.println("Starting command");
+        long startTime = System.currentTimeMillis();
+        boolean result = cmd.execute();
+        long executionTime = System.currentTimeMillis() - startTime;
+        assertTrue(result);
+        System.out.println("Unsuccessful Execution and fallback took : " + executionTime);
+        assertTrue(executionTime < LATENCY);
+        assertEquals(0, cmd.metrics.getRollingCount(HystrixRollingNumberEvent.SUCCESS));
+        assertEquals(0, cmd.metrics.getRollingCount(HystrixRollingNumberEvent.EXCEPTION_THROWN));
+        assertEquals(0, cmd.metrics.getRollingCount(HystrixRollingNumberEvent.FAILURE));
+        assertEquals(0, cmd.metrics.getRollingCount(HystrixRollingNumberEvent.BAD_REQUEST));
+        assertEquals(0, cmd.metrics.getRollingCount(HystrixRollingNumberEvent.FALLBACK_REJECTION));
+        assertEquals(0, cmd.metrics.getRollingCount(HystrixRollingNumberEvent.FALLBACK_FAILURE));
+        assertEquals(1, cmd.metrics.getRollingCount(HystrixRollingNumberEvent.FALLBACK_SUCCESS));
+        assertEquals(0, cmd.metrics.getRollingCount(HystrixRollingNumberEvent.SEMAPHORE_REJECTED));
+        assertEquals(0, cmd.metrics.getRollingCount(HystrixRollingNumberEvent.SHORT_CIRCUITED));
+        assertEquals(0, cmd.metrics.getRollingCount(HystrixRollingNumberEvent.THREAD_POOL_REJECTED));
+        assertEquals(1, cmd.metrics.getRollingCount(HystrixRollingNumberEvent.TIMEOUT));
+        assertEquals(0, cmd.metrics.getRollingCount(HystrixRollingNumberEvent.RESPONSE_FROM_CACHE));
+
+        assertEquals(100, cmd.metrics.getHealthCounts().getErrorPercentage());
+        assertEquals(0, cmd.metrics.getCurrentConcurrentExecutionCount());
+
+        assertSaneHystrixRequestLog(1);
+    }
+
+
     /**
      * Test a recoverable java.lang.Error being thrown with no fallback
      */
@@ -5120,7 +5153,7 @@ public class HystrixCommandTest extends CommonHystrixCommandTests<TestHystrixCom
 
     }
 
-    private static class InterruptibleCommand extends TestHystrixCommand<Boolean> {
+       private static class InterruptibleCommand extends TestHystrixCommand<Boolean> {
 
         public InterruptibleCommand(TestCircuitBreaker circuitBreaker, boolean shouldInterrupt) {
             super(testPropsBuilder()
@@ -5150,6 +5183,46 @@ public class HystrixCommandTest extends CommonHystrixCommandTests<TestHystrixCom
             return hasBeenInterrupted;
         }
     }
+
+    private static class InterruptibleCommandWithFallback extends TestHystrixCommand<Boolean> {
+
+        private final int latency;
+
+        public InterruptibleCommandWithFallback(TestCircuitBreaker circuitBreaker, boolean shouldInterrupt, int latency) {
+            super(testPropsBuilder()
+                    .setCircuitBreaker(circuitBreaker).setMetrics(circuitBreaker.metrics)
+                    .setCommandPropertiesDefaults(HystrixCommandPropertiesTest.getUnitTestPropertiesSetter()
+                            .withExecutionIsolationThreadInterruptOnTimeout(shouldInterrupt)
+                            .withExecutionTimeoutInMilliseconds(100)));
+            this.latency = latency;
+        }
+
+        private volatile boolean hasBeenInterrupted;
+
+        public boolean hasBeenInterrupted() {
+            return hasBeenInterrupted;
+        }
+
+        @Override
+        protected Boolean run() throws Exception {
+            try {
+                Thread.sleep(latency);
+            }
+            catch (InterruptedException e) {
+                System.out.println("Interrupted!");
+                e.printStackTrace();
+                hasBeenInterrupted = true;
+            }
+
+            return hasBeenInterrupted;
+        }
+
+        @Override
+        protected Boolean getFallback() {
+            return true;
+        }
+    }
+
 
     private static class CommandWithDisabledTimeout extends TestHystrixCommand<Boolean> {
         private final int latency;
