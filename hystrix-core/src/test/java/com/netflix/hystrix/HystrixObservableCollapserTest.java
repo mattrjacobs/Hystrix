@@ -160,7 +160,7 @@ public class HystrixObservableCollapserTest {
         HystrixObservableCollapser<String, String, String, String> collapser1 = new TestCollapserWithMultipleResponses(timer, 1, 3, false, prefixMapper, onMissingComplete);
         HystrixObservableCollapser<String, String, String, String> collapser2 = new TestCollapserWithMultipleResponses(timer, 2, 3, false, prefixMapper, onMissingComplete);
 
-        System.out.println("Starting to observe collapser1");
+        System.out.println("Thread which calls observe() on collapser instances is [" + Thread.currentThread().getName() + "] and has ReqCtx : " + HystrixRequestContext.getContextForCurrentThread());
         Observable<String> result1 = collapser1.observe();
         Observable<String> result2 = collapser2.observe();
 
@@ -748,6 +748,7 @@ public class HystrixObservableCollapserTest {
 
         @Override
         protected HystrixObservableCommand<String> createCommand(Collection<CollapsedRequest<String, String>> collapsedRequests) {
+            System.out.println("Thread creating batch command is [" + Thread.currentThread().getName() + "] and has ReqCtx : " + HystrixRequestContext.getContextForCurrentThread());
             if (commandConstructionFails) {
                 throw new RuntimeException("Exception thrown in command construction");
             } else {
@@ -815,10 +816,12 @@ public class HystrixObservableCollapserTest {
 
         @Override
         protected Observable<String> construct() {
+            System.out.println("Thread constructing batch HystrixObservableCommand is [" + Thread.currentThread().getName() + "] and has ReqCtx : " + HystrixRequestContext.getContextForCurrentThread());
             return Observable.create(new OnSubscribe<String>() {
                 @Override
                 public void call(Subscriber<? super String> subscriber) {
                     try {
+                        System.out.println("Thread executing batch HystrixObservableCommand is [" + Thread.currentThread().getName() + "] and has ReqCtx : " + HystrixRequestContext.getContextForCurrentThread());
                         Thread.sleep(100);
                         for (Integer arg: args) {
                             int numEmits = emitsPerArg.get(arg.toString());
