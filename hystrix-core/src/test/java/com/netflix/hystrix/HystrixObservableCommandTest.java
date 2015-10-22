@@ -4231,6 +4231,11 @@ public class HystrixObservableCommandTest extends CommonHystrixCommandTests<Test
                         return new HystrixContextScheduler(HystrixPlugins.getInstance().getConcurrencyStrategy(), this, shouldInterruptThread);
                     }
 
+                    @Override
+                    public HystrixThreadPoolKey getKey() {
+                        return HystrixThreadPoolKey.Factory.asKey("TestRejection");
+                    }
+
                 })) {
 
             @Override
@@ -6798,6 +6803,11 @@ public class HystrixObservableCommandTest extends CommonHystrixCommandTests<Test
                         @Override
                         public Scheduler getScheduler(Func0<Boolean> shouldInterruptThread) {
                             return new HystrixContextScheduler(HystrixPlugins.getInstance().getConcurrencyStrategy(), this, shouldInterruptThread);
+                        }
+
+                        @Override
+                        public HystrixThreadPoolKey getKey() {
+                            return HystrixThreadPoolKey.Factory.asKey("TestRejection");
                         }
 
                     }));
