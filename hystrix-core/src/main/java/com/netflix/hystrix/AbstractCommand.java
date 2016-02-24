@@ -755,6 +755,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
                                 @Override
                                 public void call() {
+                                    System.out.println("Releasing the fallback semaphore!");
                                     fallbackSemaphore.release();
                                 }
                             });
