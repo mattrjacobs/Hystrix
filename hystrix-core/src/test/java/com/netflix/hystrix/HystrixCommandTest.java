@@ -41,6 +41,7 @@ import rx.observers.TestSubscriber;
 import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -52,6 +53,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.*;
@@ -2681,6 +2683,69 @@ public class HystrixCommandTest extends CommonHystrixCommandTests<TestHystrixCom
         assertTrue(cmd.isResponseTimedOut());
 
         assertEquals(0, cmd.metrics.getCurrentConcurrentExecutionCount());
+    }
+
+    class SingleThreadedCommand extends TestHystrixCommand<Boolean> {
+
+        private final Long arg;
+
+
+
+        public SingleThreadedCommand(Long arg, TestCommandBuilder testCommandBuilder) {
+            super(testCommandBuilder);
+            this.arg = arg;
+        }
+
+        @Override
+        protected Boolean run() throws Exception {
+            //System.out.println(Thread.currentThread().getName() + " -> " + arg);
+            return true;
+        }
+
+        @Override
+        protected Boolean getFallback() {
+            return false;
+        }
+    }
+
+    @Test
+    public void testSingleThreadedSynchronousExecutesNeverOverwhelmSingleThreadedPool() {
+        final AtomicLong counter = new AtomicLong(0);
+        final AtomicBoolean argsDone = new AtomicBoolean(false);
+        final ConcurrentLinkedQueue<Long> queue = new ConcurrentLinkedQueue<Long>();
+
+        final InspectableBuilder.TestCommandBuilder singleThreadedProperties = new InspectableBuilder.TestCommandBuilder(ExecutionIsolationStrategy.THREAD)
+                .setThreadPoolPropertiesDefaults(HystrixThreadPoolProperties.Setter.getUnitTestPropertiesBuilder()
+                        .withCoreSize(1));
+
+        Thread argProducer = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                while (counter.get() < 1000) {
+                    Long currentArg = counter.getAndIncrement();
+                    //System.out.println(Thread.currentThread().getName() + " ARG PRODUCER : " + currentArg);
+                    queue.offer(currentArg);
+                    try {
+                        Thread.sleep(1);
+                    } catch (InterruptedException ex) {
+                        //do nothing
+                    }
+                }
+                argsDone.set(true);
+            }
+        });
+
+        argProducer.start();
+
+        while (!argsDone.get() || !queue.isEmpty()) {
+            Long arg = queue.poll();
+            //System.out.println(Thread.currentThread().getName() + " ARG CONSUMER : " + arg);
+            if (arg != null) {
+                HystrixCommand<Boolean> cmd = new SingleThreadedCommand(arg, singleThreadedProperties);
+                Boolean result = cmd.execute();
+                assertTrue(result);
+            }
+        }
     }
 
     @Override
