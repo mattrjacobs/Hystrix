@@ -17,6 +17,7 @@ package com.netflix.hystrix;
 
 import com.netflix.hystrix.exception.HystrixRuntimeException;
 import com.netflix.hystrix.exception.HystrixRuntimeException.FailureType;
+import com.netflix.hystrix.strategy.concurrency.HystrixRequestContext;
 import com.netflix.hystrix.strategy.executionhook.HystrixCommandExecutionHook;
 import rx.Notification;
 
@@ -147,6 +148,7 @@ class TestableExecutionHook extends HystrixCommandExecutionHook {
 
     @Override
     public <T> void onExecutionStart(HystrixInvokable<T> commandInstance) {
+        System.out.println("OnExecutionStart with context : " + HystrixRequestContext.getContextForCurrentThread());
         recordHookCall(executionSequence, "onExecutionStart");
         super.onExecutionStart(commandInstance);
     }
