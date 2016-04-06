@@ -65,10 +65,10 @@ public class RollingDistributionStream<Event extends HystrixEvent> {
         }
     };
 
-    private static final Func1<Histogram, CachedValuesHistogram> cacheHistogramValues = histogram -> CachedValuesHistogram.backedBy(histogram);
+    private static final Func1<Histogram, CachedValuesHistogram> cacheHistogramValues = CachedValuesHistogram::backedBy;
 
     private static final Func1<Observable<CachedValuesHistogram>, Observable<List<CachedValuesHistogram>>> convertToList =
-            windowOf2 -> windowOf2.toList();
+            Observable::toList;
 
     protected RollingDistributionStream(final HystrixEventStream<Event> stream, final int numBuckets, final int bucketSizeInMs,
                                         final Func2<Histogram, Event, Histogram> addValuesToBucket) {
