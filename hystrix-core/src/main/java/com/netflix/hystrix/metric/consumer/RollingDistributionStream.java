@@ -48,7 +48,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * These values get produced and cached in this class.
  */
 public class RollingDistributionStream<Event extends HystrixEvent> {
-    private AtomicReference<Subscription> rollingDistributionSubscription = new AtomicReference<Subscription>(null);
+    private AtomicReference<Subscription> rollingDistributionSubscription = new AtomicReference<>(null);
     private final BehaviorSubject<CachedValuesHistogram> rollingDistribution = BehaviorSubject.create(CachedValuesHistogram.backedBy(getNewHistogram()));
     private final Observable<CachedValuesHistogram> rollingDistributionStream;
 
@@ -93,7 +93,7 @@ public class RollingDistributionStream<Event extends HystrixEvent> {
 
     protected RollingDistributionStream(final HystrixEventStream<Event> stream, final int numBuckets, final int bucketSizeInMs,
                                         final Func2<Histogram, Event, Histogram> addValuesToBucket) {
-        final List<Histogram> emptyDistributionsToStart = new ArrayList<Histogram>();
+        final List<Histogram> emptyDistributionsToStart = new ArrayList<>();
         for (int i = 0; i < numBuckets; i++) {
             emptyDistributionsToStart.add(getNewHistogram());
         }
@@ -193,7 +193,7 @@ public class RollingDistributionStream<Event extends HystrixEvent> {
     }
 
     static int POOL_SIZE = 1000;
-    static ConcurrentLinkedQueue<Histogram> HISTOGRAM_POOL = new ConcurrentLinkedQueue<Histogram>();
+    static ConcurrentLinkedQueue<Histogram> HISTOGRAM_POOL = new ConcurrentLinkedQueue<>();
 
     static {
         for (int i = 0; i < POOL_SIZE; i++) {
