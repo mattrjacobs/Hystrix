@@ -34,6 +34,7 @@ import org.junit.Test;
 import rx.Observable;
 import rx.Observer;
 import rx.Scheduler;
+import rx.functions.Action0;
 import rx.functions.Action1;
 import rx.functions.Func0;
 import rx.observers.TestSubscriber;
@@ -917,6 +918,101 @@ public class HystrixCommandTest extends CommonHystrixCommandTests<TestHystrixCom
         }
 
         assertCommandExecutionEvents(command, HystrixEventType.TIMEOUT, HystrixEventType.FALLBACK_FAILURE);
+        assertNotNull(command.getExecutionException());
+        assertEquals(0, command.getBuilder().metrics.getCurrentConcurrentExecutionCount());
+        assertSaneHystrixRequestLog(1);
+    }
+
+    @Test
+    public void testObservedTimeoutWithRxRetry() {  //See Github issue: https://github.com/Netflix/Hystrix/issues/1100
+        TestHystrixCommand<Integer> command = getCommand(ExecutionIsolationStrategy.THREAD, AbstractTestHystrixCommand.ExecutionResult.SUCCESS, 200, AbstractTestHystrixCommand.FallbackResult.UNIMPLEMENTED, 50);
+        try {
+            Observable<Integer> result = command.toObservable().
+                    doOnNext(new Action1<Integer>() {
+                        @Override
+                        public void call(Integer i) {
+                            System.out.println("Original OnNext : " + i);
+                        }
+                    }).
+                    doOnError(new Action1<Throwable>() {
+                        @Override
+                        public void call(Throwable t) {
+                            System.out.println("Original OnError : " + t);
+                        }
+                    }).
+                    doOnCompleted(new Action0() {
+                        @Override
+                        public void call() {
+                            System.out.println("Original OnCompleted");
+                        }
+                    }).
+                    doOnUnsubscribe(new Action0() {
+                        @Override
+                        public void call() {
+                            System.out.println("Original unsubscribe!");
+                        }
+                    });
+
+            Observable<Integer> retried = result.retry(2).
+                    doOnNext(new Action1<Integer>() {
+                        @Override
+                        public void call(Integer i) {
+                            System.out.println("Retry OnNext : " + i);
+                        }
+                    }).
+                    doOnError(new Action1<Throwable>() {
+                        @Override
+                        public void call(Throwable t) {
+                            System.out.println("Retry OnError : " + t);
+                        }
+                    }).
+                    doOnCompleted(new Action0() {
+                        @Override
+                        public void call() {
+                            System.out.println("Retry OnCompleted");
+                        }
+                    }).
+                    doOnUnsubscribe(new Action0() {
+                        @Override
+                        public void call() {
+                            System.out.println("Retry Unsubscribe");
+                        }
+                    });
+            List<Integer> retryResult = retried.toList().
+                    doOnNext(new Action1<List<Integer>>() {
+                        @Override
+                        public void call(List<Integer> i) {
+                            System.out.println("toList OnNext : " + i);
+                        }
+                    }).
+                    doOnError(new Action1<Throwable>() {
+                        @Override
+                        public void call(Throwable t) {
+                            System.out.println("toList OnError : " + t);
+                        }
+                    }).
+                    doOnCompleted(new Action0() {
+                        @Override
+                        public void call() {
+                            System.out.println("toList OnCompleted");
+                        }
+                    }).
+                    doOnUnsubscribe(new Action0() {
+                        @Override
+                        public void call() {
+                            System.out.println("toList Unsubscribe");
+                        }
+                    }).
+                    toBlocking().single();
+            System.out.println("RETRIED : " + retryResult);
+            fail("we shouldn't get here");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        assertTrue(command.getExecutionTimeInMilliseconds() > -1);
+        assertTrue(command.isResponseTimedOut());
+        assertCommandExecutionEvents(command, HystrixEventType.TIMEOUT, HystrixEventType.FALLBACK_MISSING);
         assertNotNull(command.getExecutionException());
         assertEquals(0, command.getBuilder().metrics.getCurrentConcurrentExecutionCount());
         assertSaneHystrixRequestLog(1);
