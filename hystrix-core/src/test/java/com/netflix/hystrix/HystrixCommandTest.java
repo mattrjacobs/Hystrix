@@ -29,6 +29,7 @@ import com.netflix.hystrix.strategy.concurrency.HystrixContextScheduler;
 import com.netflix.hystrix.strategy.concurrency.HystrixRequestContext;
 import com.netflix.hystrix.strategy.executionhook.HystrixCommandExecutionHook;
 import com.netflix.hystrix.strategy.properties.HystrixProperty;
+import org.HdrHistogram.Histogram;
 import org.junit.After;
 import org.junit.Rule;
 import org.junit.Test;
@@ -3115,6 +3116,28 @@ public class HystrixCommandTest extends CommonHystrixCommandTests<TestHystrixCom
         } catch (InterruptedException ex) {
             ex.printStackTrace();
         }
+    }
+
+    @Test
+    public void gatherLatencyDistributionForTimedOutRequests() {
+        int NUM_SAMPLES = 1000;
+        int TIMEOUT_IN_MS = 10;
+
+        Histogram latencies = new Histogram(3);
+
+        for (int i = 0; i < NUM_SAMPLES; i++) {
+            HystrixCommand<Integer> cmd = getCommand(ExecutionIsolationStrategy.THREAD, AbstractTestHystrixCommand.ExecutionResult.SUCCESS, 200, AbstractTestHystrixCommand.FallbackResult.SUCCESS, TIMEOUT_IN_MS);
+            assertEquals(FlexibleTestHystrixCommand.FALLBACK_VALUE, cmd.execute());
+            latencies.recordValue(cmd.getExecutionTimeInMilliseconds());
+        }
+
+        System.out.println("Min : " + latencies.getMinValue());
+        System.out.println("Mean : " + latencies.getMean());
+        System.out.println("Median : " + latencies.getValueAtPercentile(50));
+        System.out.println("90p : " + latencies.getValueAtPercentile(90));
+        System.out.println("95p : " + latencies.getValueAtPercentile(95));
+        System.out.println("99p : " + latencies.getValueAtPercentile(99));
+        System.out.println("Max : " + latencies.getMaxValue());
     }
 
     /* ******************************************************************************** */
