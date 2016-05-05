@@ -3120,24 +3120,47 @@ public class HystrixCommandTest extends CommonHystrixCommandTests<TestHystrixCom
 
     @Test
     public void gatherLatencyDistributionForTimedOutRequests() {
-        int NUM_SAMPLES = 1000;
-        int TIMEOUT_IN_MS = 10;
+        final int CONCURRENT_THREADS = 4;
+        final int NUM_SAMPLES = 1000;
+        final int TIMEOUT_IN_MS = 30;
 
-        Histogram latencies = new Histogram(3);
+        final Histogram summedLatencies = new Histogram(3);
+        final CountDownLatch latch = new CountDownLatch(CONCURRENT_THREADS);
 
-        for (int i = 0; i < NUM_SAMPLES; i++) {
-            HystrixCommand<Integer> cmd = getCommand(ExecutionIsolationStrategy.THREAD, AbstractTestHystrixCommand.ExecutionResult.SUCCESS, 200, AbstractTestHystrixCommand.FallbackResult.SUCCESS, TIMEOUT_IN_MS);
-            assertEquals(FlexibleTestHystrixCommand.FALLBACK_VALUE, cmd.execute());
-            latencies.recordValue(cmd.getExecutionTimeInMilliseconds());
+        for (int c = 0; c < CONCURRENT_THREADS; c++) {
+            Runnable r = new Runnable() {
+                @Override
+                public void run() {
+                    Histogram latencies = new Histogram(3);
+
+                    for (int i = 0; i < NUM_SAMPLES; i++) {
+                        HystrixCommand<Integer> cmd = getCommand(ExecutionIsolationStrategy.THREAD, AbstractTestHystrixCommand.ExecutionResult.SUCCESS, (TIMEOUT_IN_MS * 2) + 10, AbstractTestHystrixCommand.FallbackResult.SUCCESS, TIMEOUT_IN_MS);
+                        assertEquals(FlexibleTestHystrixCommand.FALLBACK_VALUE, cmd.execute());
+                        latencies.recordValue(cmd.getExecutionTimeInMilliseconds());
+                    }
+                    summedLatencies.add(latencies);
+                    latch.countDown();
+                }
+            };
+
+            Thread t = new Thread(r);
+            t.start();
         }
 
-        System.out.println("Min : " + latencies.getMinValue());
-        System.out.println("Mean : " + latencies.getMean());
-        System.out.println("Median : " + latencies.getValueAtPercentile(50));
-        System.out.println("90p : " + latencies.getValueAtPercentile(90));
-        System.out.println("95p : " + latencies.getValueAtPercentile(95));
-        System.out.println("99p : " + latencies.getValueAtPercentile(99));
-        System.out.println("Max : " + latencies.getMaxValue());
+        try {
+            assertTrue(latch.await(2, TimeUnit.MINUTES));
+        } catch (InterruptedException ex) {
+
+        }
+        assertTrue(summedLatencies.getMinValue() >= TIMEOUT_IN_MS); //everything timed out
+        System.out.println("Number of samples : " + summedLatencies.getTotalCount());
+        System.out.println("Min : " + summedLatencies.getMinValue());
+        System.out.println("Mean : " + summedLatencies.getMean());
+        System.out.println("Median : " + summedLatencies.getValueAtPercentile(50));
+        System.out.println("90p : " + summedLatencies.getValueAtPercentile(90));
+        System.out.println("95p : " + summedLatencies.getValueAtPercentile(95));
+        System.out.println("99p : " + summedLatencies.getValueAtPercentile(99));
+        System.out.println("Max : " + summedLatencies.getMaxValue());
     }
 
     /* ******************************************************************************** */
