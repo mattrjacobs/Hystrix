@@ -41,7 +41,6 @@ import rx.functions.Action0;
 import rx.functions.Action1;
 import rx.functions.Action2;
 import rx.functions.Func0;
-import rx.observables.AsyncOnSubscribe;
 import rx.observers.TestSubscriber;
 import rx.schedulers.Schedulers;
 
@@ -132,6 +131,39 @@ public class HystrixCommandTest extends CommonHystrixCommandTests<TestHystrixCom
         assertEquals(0, command.getBuilder().metrics.getCurrentConcurrentExecutionCount());
         assertSaneHystrixRequestLog(1);
         assertCommandExecutionEvents(command, HystrixEventType.SUCCESS);
+    }
+
+    @Test
+    public void testObserveOnThread() {
+        TestHystrixCommand<Integer> command = getCommand(ExecutionIsolationStrategy.THREAD, AbstractTestHystrixCommand.ExecutionResult.SUCCESS);
+
+        Observable<Integer> o = command.toObservable();
+        final CountDownLatch latch = new CountDownLatch(1);
+
+        o.observeOn(Schedulers.newThread()).subscribe(new Subscriber<Integer>() {
+            @Override
+            public void onCompleted() {
+                System.out.println(Thread.currentThread().getName() + " : OnCompleted");
+                latch.countDown();
+            }
+
+            @Override
+            public void onError(Throwable e) {
+                System.out.println(Thread.currentThread().getName() + " : OnError : " + e);
+                latch.countDown();
+            }
+
+            @Override
+            public void onNext(Integer i) {
+                System.out.println(Thread.currentThread().getName() + " : OnNext : " + i);
+            }
+        });
+
+        try {
+            assertTrue(latch.await(100, TimeUnit.MILLISECONDS));
+        } catch (InterruptedException ex) {
+
+        }
     }
 
     /**
