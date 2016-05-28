@@ -31,9 +31,13 @@ public class EventStreamRequestHandler extends RequestHandler {
         Observable<Payload> defer = Observable
             .defer(() -> {
                 try {
+                    for (byte b: payload.getData().array()) {
+                        System.out.println("Payload byte : " + b);
+                    }
                     int typeId = payload
                         .getData()
                         .getInt(0);
+                    System.out.println(Thread.currentThread().getName() + " Stream enum : " + typeId);
 
                     EventStreamEnum eventStreamEnum = EventStreamEnum.findByTypeId(typeId);
                     return eventStreamEnum
