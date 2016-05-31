@@ -9,12 +9,14 @@ import io.reactivesocket.Payload;
 import io.reactivesocket.ReactiveSocket;
 import io.reactivesocket.netty.tcp.client.ClientTcpDuplexConnection;
 import org.agrona.BitUtil;
+import org.agrona.concurrent.UnsafeBuffer;
+import org.reactivestreams.Publisher;
+import rx.Observable;
 import rx.RxReactiveStreams;
-import rx.Subscriber;
+import rx.observers.TestSubscriber;
 
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 public class HystrixMetricsReactiveSocketClient {
@@ -23,8 +25,10 @@ public class HystrixMetricsReactiveSocketClient {
         System.out.println("Starting HystrixMetricsReactiveSocketClient...");
 
         ClientTcpDuplexConnection duplexConnection = RxReactiveStreams.toObservable(
-                ClientTcpDuplexConnection.create(InetSocketAddress.createUnresolved("localhost", 8025), new NioEventLoopGroup())
+                ClientTcpDuplexConnection.create(InetSocketAddress.createUnresolved("127.0.0.1", 8025), new NioEventLoopGroup())
         ).toBlocking().single();
+
+        System.out.println("Created TCP Connection : " + duplexConnection);
 
         ReactiveSocket client = DefaultReactiveSocket
                 .fromClientConnection(duplexConnection, ConnectionSetupPayload.create("UTF-8", "UTF-8"), Throwable::printStackTrace);
@@ -32,33 +36,25 @@ public class HystrixMetricsReactiveSocketClient {
         client.startAndWait();
         System.out.println("Created client : " + client);
 
-        final CountDownLatch latch = new CountDownLatch(1);
+        Payload p = createPayload(EventStreamEnum.METRICS_STREAM);
 
-        RxReactiveStreams
-                .toObservable(client.requestSubscription(
-                        createPayload(EventStreamEnum.METRICS_STREAM)))
-                .take(10)
-                .subscribe(new Subscriber<Payload>() {
-                    @Override
-                    public void onCompleted() {
-                        System.out.println(Thread.currentThread().getName() + " OnCompleted");
-                        latch.countDown();
-                    }
+        //Publisher<Payload> publisher = client.requestResponse(p);
+        Publisher<Payload> publisher = client.requestSubscription(p);
+        Observable<Payload> o = RxReactiveStreams.toObservable(publisher);
 
-                    @Override
-                    public void onError(Throwable e) {
-                        System.out.println(Thread.currentThread().getName() + " OnError : " + e);
-                        e.printStackTrace();
-                        latch.countDown();
-                    }
+        TestSubscriber<Payload> subscriber = new TestSubscriber<>();
 
-                    @Override
-                    public void onNext(Payload payload) {
-                        System.out.println(Thread.currentThread().getName() + " OnNext : " + payload);
-                    }
-                });
+        o.subscribe(subscriber);
 
-        latch.await(2000, TimeUnit.MILLISECONDS);
+        subscriber.awaitTerminalEvent(1000, TimeUnit.MILLISECONDS);
+
+        System.out.println("OnNexts : " + subscriber.getOnNextEvents());
+        System.out.println("OnErrors : " + subscriber.getOnErrorEvents());
+        System.out.println("OnCompleted : " + subscriber.getOnCompletedEvents());
+
+        for (Throwable t : subscriber.getOnErrorEvents()) {
+            t.printStackTrace();
+        }
     }
 
     private static Payload createPayload(EventStreamEnum eventStreamEnum) {
@@ -66,12 +62,10 @@ public class HystrixMetricsReactiveSocketClient {
         Payload p = new Payload() {
             @Override
             public ByteBuffer getData() {
-                try {
-                    return ByteBuffer.allocate(BitUtil.SIZE_OF_INT).putInt(eventStreamEnum.getTypeId());
-                } catch (Throwable ex) {
-                    ex.printStackTrace();
-                    return Frame.NULL_BYTEBUFFER;
-                }
+//                UnsafeBuffer unsafeBuffer = new UnsafeBuffer(ByteBuffer.allocate(4));
+//                unsafeBuffer.putInt(0, 4);
+//                return unsafeBuffer.byteBuffer();
+                return ByteBuffer.allocate(4).putInt(0, 4);
             }
 
             @Override
@@ -80,6 +74,13 @@ public class HystrixMetricsReactiveSocketClient {
             }
         };
 
+//        System.out.println("Payload : " + p);
+//        for (byte b: p.getData().array()) {
+//            System.out.println("Payload data byte : " + b);
+//        }
+//        for (byte b: p.getMetadata().array()) {
+//            System.out.println("Payload metadata byte : " + b);
+//        }
         return p;
     }
 }

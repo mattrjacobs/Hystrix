@@ -35,9 +35,11 @@ public class HystrixMetricsReactiveSocketServer {
                             pipeline.addLast(handler);
                         }
                     });
-
-            Channel localhost = b.bind("0.0.0.0", 8025).sync().channel();
+            System.out.println("About to set up Channel");
+            Channel localhost = b.bind("127.0.0.1", 8025).sync().channel();
+            System.out.println("Created Channel : " + localhost);
             localhost.closeFuture().sync();
+            System.out.println("Done closing Channel : " + localhost);
         } finally {
             bossGroup.shutdownGracefully();
             workerGroup.shutdownGracefully();
