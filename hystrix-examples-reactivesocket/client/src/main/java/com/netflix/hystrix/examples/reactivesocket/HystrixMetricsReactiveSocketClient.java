@@ -46,7 +46,7 @@ public class HystrixMetricsReactiveSocketClient {
 
         o.subscribe(subscriber);
 
-        subscriber.awaitTerminalEvent(1000, TimeUnit.MILLISECONDS);
+        subscriber.awaitTerminalEvent(10000, TimeUnit.MILLISECONDS);
 
         System.out.println("OnNexts : " + subscriber.getOnNextEvents());
         System.out.println("OnErrors : " + subscriber.getOnErrorEvents());
@@ -58,14 +58,10 @@ public class HystrixMetricsReactiveSocketClient {
     }
 
     private static Payload createPayload(EventStreamEnum eventStreamEnum) {
-        System.out.println("CreatePayload : " + eventStreamEnum);
-        Payload p = new Payload() {
+        return new Payload() {
             @Override
             public ByteBuffer getData() {
-//                UnsafeBuffer unsafeBuffer = new UnsafeBuffer(ByteBuffer.allocate(4));
-//                unsafeBuffer.putInt(0, 4);
-//                return unsafeBuffer.byteBuffer();
-                return ByteBuffer.allocate(4).putInt(0, 4);
+                return ByteBuffer.allocate(BitUtil.SIZE_OF_INT).putInt(0, eventStreamEnum.getTypeId());
             }
 
             @Override
@@ -73,14 +69,5 @@ public class HystrixMetricsReactiveSocketClient {
                 return Frame.NULL_BYTEBUFFER;
             }
         };
-
-//        System.out.println("Payload : " + p);
-//        for (byte b: p.getData().array()) {
-//            System.out.println("Payload data byte : " + b);
-//        }
-//        for (byte b: p.getMetadata().array()) {
-//            System.out.println("Payload metadata byte : " + b);
-//        }
-        return p;
     }
 }

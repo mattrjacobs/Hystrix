@@ -1,5 +1,7 @@
 package com.netflix.hystrix.examples.reactivesocket;
 
+import com.netflix.hystrix.HystrixCommandGroupKey;
+import com.netflix.hystrix.HystrixObservableCommand;
 import com.netflix.hystrix.contrib.reactivesocket.EventStreamRequestHandler;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
@@ -11,6 +13,12 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
 import io.reactivesocket.netty.tcp.server.ReactiveSocketServerHandler;
+import rx.Observable;
+import rx.functions.Func0;
+import rx.functions.Func1;
+import rx.schedulers.Schedulers;
+
+import java.util.concurrent.TimeUnit;
 
 public class HystrixMetricsReactiveSocketServer {
 
@@ -38,12 +46,44 @@ public class HystrixMetricsReactiveSocketServer {
             System.out.println("About to set up Channel");
             Channel localhost = b.bind("127.0.0.1", 8025).sync().channel();
             System.out.println("Created Channel : " + localhost);
+
+            executeCommands();
             localhost.closeFuture().sync();
             System.out.println("Done closing Channel : " + localhost);
         } finally {
             bossGroup.shutdownGracefully();
             workerGroup.shutdownGracefully();
             System.out.println("Shutting down NIO threads!");
+        }
+    }
+
+    private static void executeCommands() {
+        Observable.interval(100, TimeUnit.MILLISECONDS).flatMap(ts ->
+                new SyntheticCommand().observe()
+        ).subscribe(n -> System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " : OnNext : " + n));
+    }
+
+    static class SyntheticCommand extends HystrixObservableCommand<Boolean> {
+
+        protected SyntheticCommand() {
+            super(Setter.withGroupKey(HystrixCommandGroupKey.Factory.asKey("Example")));
+        }
+
+        @Override
+        protected Observable<Boolean> construct() {
+            return Observable.defer(() -> {
+                try {
+                    Thread.sleep(10);
+                } catch (InterruptedException ex) {
+                    return Observable.error(ex);
+                }
+                return Observable.just(true);
+            }).subscribeOn(Schedulers.io());
+        }
+
+        @Override
+        protected Observable<Boolean> resumeWithFallback() {
+            return Observable.just(false);
         }
     }
 }

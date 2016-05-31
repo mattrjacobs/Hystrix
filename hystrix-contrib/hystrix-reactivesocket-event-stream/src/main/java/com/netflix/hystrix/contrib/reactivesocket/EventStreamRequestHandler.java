@@ -20,8 +20,6 @@ public class EventStreamRequestHandler extends RequestHandler {
 
     @Override
     public Publisher<Payload> handleRequestResponse(Payload payload) {
-        System.out.println(Thread.currentThread().getName() + " handleRequestResponse : " + payload + " w metadata : " + payload.getMetadata().array().length + ", data : " + payload.getData().array().length);
-
         Observable<Payload> o = Observable.defer(() -> {
             try {
                 int typeId = payload
@@ -46,21 +44,16 @@ public class EventStreamRequestHandler extends RequestHandler {
 
     @Override
     public Publisher<Payload> handleSubscription(Payload payload) {
-        System.out.println(Thread.currentThread().getName() + " handleSubscription : " + payload + " w metadata : " + payload.getMetadata().array().length + ", data : " + payload.getData().array().length);
         Observable<Payload> defer = Observable
             .defer(() -> {
                 try {
-                    for (byte b: payload.getData().array()) {
-                        System.out.println("Payload byte : " + b);
-                    }
                     int typeId = payload
                         .getData()
                         .getInt(0);
                     System.out.println(Thread.currentThread().getName() + " Stream enum : " + typeId);
 
                     EventStreamEnum eventStreamEnum = EventStreamEnum.findByTypeId(typeId);
-                    return eventStreamEnum
-                        .get();
+                    return eventStreamEnum.get();
                 } catch (Throwable t) {
                     logger.error(t.getMessage(), t);
                     return Observable.error(t);
