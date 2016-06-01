@@ -1,6 +1,7 @@
 apply plugin: 'application'
 
-mainClassName = 'com.netflix.hystrix.examples.reactivesocket.HystrixMetricsReactiveSocketClient'
+mainClassName = 'com.netflix.hystrix.examples.reactivesocket.HystrixMetricsReactiveSocketClientRunner'
+applicationDefaultJvmArgs = ["-Dio.netty.leakDetectionLevel=paranoid"]
 
 sourceCompatibility = JavaVersion.VERSION_1_8
 targetCompatibility = JavaVersion.VERSION_1_8
@@ -13,6 +14,5 @@ dependencies {
     compile project(':hystrix-core')
     compile project(':hystrix-examples')
 	compile project(':hystrix-reactivesocket-event-stream')
-	compile 'io.reactivesocket:reactivesocket-netty:0.1.9'
 }
 

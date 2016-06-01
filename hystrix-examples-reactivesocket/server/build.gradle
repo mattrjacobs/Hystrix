@@ -2,6 +2,8 @@ apply plugin: 'application'
 
 mainClassName = 'com.netflix.hystrix.examples.reactivesocket.HystrixMetricsReactiveSocketServer'
 
+applicationDefaultJvmArgs = ["-Dio.netty.leakDetectionLevel=paranoid"]
+
 sourceCompatibility = JavaVersion.VERSION_1_8
 targetCompatibility = JavaVersion.VERSION_1_8
 

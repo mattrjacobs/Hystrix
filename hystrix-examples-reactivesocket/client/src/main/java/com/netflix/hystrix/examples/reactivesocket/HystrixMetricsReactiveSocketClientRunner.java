@@ -1,54 +1,49 @@
+/**
+ * Copyright 2016 Netflix, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.netflix.hystrix.examples.reactivesocket;
 
 import com.netflix.hystrix.HystrixCommandKey;
-import com.netflix.hystrix.HystrixThreadPoolKey;
 import com.netflix.hystrix.contrib.reactivesocket.EventStreamEnum;
+import com.netflix.hystrix.contrib.reactivesocket.client.HystrixMetricsReactiveSocketClient;
 import com.netflix.hystrix.contrib.reactivesocket.sample.HystrixUtilizationStream;
 import com.netflix.hystrix.metric.sample.HystrixCommandUtilization;
-import com.netflix.hystrix.metric.sample.HystrixThreadPoolUtilization;
 import com.netflix.hystrix.metric.sample.HystrixUtilization;
 import io.netty.channel.nio.NioEventLoopGroup;
-import io.reactivesocket.ConnectionSetupPayload;
-import io.reactivesocket.DefaultReactiveSocket;
-import io.reactivesocket.Frame;
 import io.reactivesocket.Payload;
-import io.reactivesocket.ReactiveSocket;
-import io.reactivesocket.netty.tcp.client.ClientTcpDuplexConnection;
-import org.agrona.BitUtil;
 import org.reactivestreams.Publisher;
 import rx.Observable;
 import rx.RxReactiveStreams;
 import rx.Subscriber;
 import rx.Subscription;
 
-import java.net.InetSocketAddress;
-import java.nio.ByteBuffer;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-public class HystrixMetricsReactiveSocketClient {
+public class HystrixMetricsReactiveSocketClientRunner {
     public static void main(String[] args) throws InterruptedException {
         System.out.println("Starting HystrixMetricsReactiveSocketClient...");
 
-        ClientTcpDuplexConnection duplexConnection = RxReactiveStreams.toObservable(
-                ClientTcpDuplexConnection.create(InetSocketAddress.createUnresolved("127.0.0.1", 8025), new NioEventLoopGroup())
-        ).toBlocking().single();
-
-        System.out.println("Created TCP Connection : " + duplexConnection);
-
-        ReactiveSocket client = DefaultReactiveSocket
-                .fromClientConnection(duplexConnection, ConnectionSetupPayload.create("UTF-8", "UTF-8"), Throwable::printStackTrace);
-
+        HystrixMetricsReactiveSocketClient client = new HystrixMetricsReactiveSocketClient("127.0.0.1", 8025, new NioEventLoopGroup());
         client.startAndWait();
-        System.out.println("Created client : " + client);
 
-        Payload p = createPayload(EventStreamEnum.UTILIZATION_EVENT_STREAM);
-
-        Publisher<Payload> publisher = client.requestResponse(p);
-        //Publisher<Payload> publisher = client.requestSubscription(p);
+        //Publisher<Payload> publisher = client.requestResponse(EventStreamEnum.UTILIZATION_EVENT_STREAM);
+        Publisher<Payload> publisher = client.requestStream(EventStreamEnum.UTILIZATION_EVENT_STREAM, 10);
+        //Publisher<Payload> publisher = client.requestSubscription(EventStreamEnum.UTILIZATION_EVENT_STREAM);
         Observable<Payload> o = RxReactiveStreams.toObservable(publisher);
-
 
         final CountDownLatch latch = new CountDownLatch(1);
 
@@ -82,19 +77,6 @@ public class HystrixMetricsReactiveSocketClient {
 
         latch.await(10000, TimeUnit.MILLISECONDS);
         s.unsubscribe();
-    }
-
-    private static Payload createPayload(EventStreamEnum eventStreamEnum) {
-        return new Payload() {
-            @Override
-            public ByteBuffer getData() {
-                return ByteBuffer.allocate(BitUtil.SIZE_OF_INT).putInt(0, eventStreamEnum.getTypeId());
-            }
-
-            @Override
-            public ByteBuffer getMetadata() {
-                return Frame.NULL_BYTEBUFFER;
-            }
-        };
+        System.exit(0);
     }
 }
