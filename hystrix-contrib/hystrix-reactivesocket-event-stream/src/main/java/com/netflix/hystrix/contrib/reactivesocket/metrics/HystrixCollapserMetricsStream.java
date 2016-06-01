@@ -33,7 +33,7 @@ public class HystrixCollapserMetricsStream extends StreamingSupplier<HystrixColl
         try {
             HystrixCollapserKey key = collapserMetrics.getCollapserKey();
             ByteArrayOutputStream bos = new ByteArrayOutputStream();
-            JsonGenerator json = jsonFactory.createGenerator(bos);
+            JsonGenerator json = cborFactory.createGenerator(bos);
             json.writeStartObject();
 
             json.writeStringField("type", "HystrixCollapser");

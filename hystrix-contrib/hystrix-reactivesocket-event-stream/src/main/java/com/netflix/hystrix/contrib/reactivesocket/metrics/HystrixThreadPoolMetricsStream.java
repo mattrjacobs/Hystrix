@@ -41,7 +41,7 @@ public class HystrixThreadPoolMetricsStream extends StreamingSupplier<HystrixThr
         try {
             HystrixThreadPoolKey key = threadPoolMetrics.getThreadPoolKey();
             ByteArrayOutputStream bos = new ByteArrayOutputStream();
-            JsonGenerator json = jsonFactory.createGenerator(bos);
+            JsonGenerator json = cborFactory.createGenerator(bos);
             json.writeStartObject();
 
             json.writeStringField("type", "HystrixThreadPool");

@@ -1,6 +1,9 @@
 package com.netflix.hystrix.contrib.reactivesocket.sample;
 
 import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.cbor.CBORParser;
 import com.netflix.hystrix.HystrixCommandKey;
 import com.netflix.hystrix.HystrixThreadPoolKey;
 import com.netflix.hystrix.contrib.reactivesocket.BasePayloadSupplier;
@@ -15,10 +18,14 @@ import rx.Observable;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 
 public class HystrixUtilizationStream extends BasePayloadSupplier {
     private static final HystrixUtilizationStream INSTANCE = new HystrixUtilizationStream();
+
+    private final ObjectMapper mapper = new ObjectMapper();
 
     private HystrixUtilizationStream() {
         super();
@@ -56,7 +63,7 @@ public class HystrixUtilizationStream extends BasePayloadSupplier {
 
         try {
             ByteArrayOutputStream bos = new ByteArrayOutputStream();
-            JsonGenerator json = jsonFactory.createGenerator(bos);
+            JsonGenerator json = cborFactory.createGenerator(bos);
 
             json.writeStartObject();
             json.writeStringField("type", "HystrixUtilization");
@@ -100,5 +107,42 @@ public class HystrixUtilizationStream extends BasePayloadSupplier {
         json.writeNumberField("corePoolSize", utilization.getCurrentCorePoolSize());
         json.writeNumberField("poolSize", utilization.getCurrentPoolSize());
         json.writeEndObject();
+    }
+
+    public HystrixUtilization fromByteBuffer(ByteBuffer bb) {
+        byte[] byteArray = new byte[bb.remaining()];
+        bb.get(byteArray);
+
+        Map<HystrixCommandKey, HystrixCommandUtilization> commandUtilizationMap = new HashMap<>();
+        Map<HystrixThreadPoolKey, HystrixThreadPoolUtilization> threadPoolUtilizationMap = new HashMap<>();
+
+        try {
+            CBORParser parser = cborFactory.createParser(byteArray);
+            JsonNode rootNode = mapper.readTree(parser);
+            Iterator<Map.Entry<String, JsonNode>> commands = rootNode.path("commands").fields();
+            Iterator<Map.Entry<String, JsonNode>> threadPools = rootNode.path("threadpools").fields();
+
+            while (commands.hasNext()) {
+                Map.Entry<String, JsonNode> command = commands.next();
+                HystrixCommandKey commandKey = HystrixCommandKey.Factory.asKey(command.getKey());
+                HystrixCommandUtilization commandUtilization = new HystrixCommandUtilization(command.getValue().path("activeCount").asInt());
+                commandUtilizationMap.put(commandKey, commandUtilization);
+            }
+
+            while (threadPools.hasNext()) {
+                Map.Entry<String, JsonNode> threadPool = threadPools.next();
+                HystrixThreadPoolKey threadPoolKey = HystrixThreadPoolKey.Factory.asKey(threadPool.getKey());
+                HystrixThreadPoolUtilization threadPoolUtilization = new HystrixThreadPoolUtilization(
+                        threadPool.getValue().path("activeCount").asInt(),
+                        threadPool.getValue().path("corePoolSize").asInt(),
+                        threadPool.getValue().path("poolSize").asInt(),
+                        threadPool.getValue().path("queueSize").asInt()
+                );
+                threadPoolUtilizationMap.put(threadPoolKey, threadPoolUtilization);
+            }
+        } catch (IOException ioe) {
+            System.out.println("IO Exception : " + ioe);
+        }
+        return new HystrixUtilization(commandUtilizationMap, threadPoolUtilizationMap);
     }
 }

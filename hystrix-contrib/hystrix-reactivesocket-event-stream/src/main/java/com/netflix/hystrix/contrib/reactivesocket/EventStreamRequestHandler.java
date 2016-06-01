@@ -3,12 +3,10 @@ package com.netflix.hystrix.contrib.reactivesocket;
 import io.reactivesocket.Payload;
 import io.reactivesocket.RequestHandler;
 import org.reactivestreams.Publisher;
-import org.reactivestreams.Subscriber;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import rx.Observable;
 import rx.RxReactiveStreams;
-import rx.functions.Func0;
 
 /**
  * An implementation of {@link RequestHandler} that provides a Hystrix Stream. Takes an 32-bit integer in the {@link Payload}
@@ -20,12 +18,11 @@ public class EventStreamRequestHandler extends RequestHandler {
 
     @Override
     public Publisher<Payload> handleRequestResponse(Payload payload) {
-        Observable<Payload> o = Observable.defer(() -> {
+        Observable<Payload> singleResponse = Observable.defer(() -> {
             try {
                 int typeId = payload
                         .getData()
                         .getInt(0);
-                System.out.println(Thread.currentThread().getName() + " Stream enum : " + typeId);
                 EventStreamEnum eventStreamEnum = EventStreamEnum.findByTypeId(typeId);
                 return eventStreamEnum.get().take(1);
             } catch (Throwable t) {
@@ -34,7 +31,7 @@ public class EventStreamRequestHandler extends RequestHandler {
             }
         });
 
-        return RxReactiveStreams.toPublisher(o);
+        return RxReactiveStreams.toPublisher(singleResponse);
     }
 
     @Override
@@ -50,7 +47,6 @@ public class EventStreamRequestHandler extends RequestHandler {
                     int typeId = payload
                         .getData()
                         .getInt(0);
-                    System.out.println(Thread.currentThread().getName() + " Stream enum : " + typeId);
 
                     EventStreamEnum eventStreamEnum = EventStreamEnum.findByTypeId(typeId);
                     return eventStreamEnum.get();
@@ -61,8 +57,7 @@ public class EventStreamRequestHandler extends RequestHandler {
             })
             .onBackpressureDrop();
 
-        return RxReactiveStreams
-            .toPublisher(defer);
+        return RxReactiveStreams.toPublisher(defer);
     }
 
     @Override

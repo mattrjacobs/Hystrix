@@ -8,12 +8,12 @@ import rx.subjects.BehaviorSubject;
 import java.util.function.Supplier;
 
 public abstract class BasePayloadSupplier implements Supplier<Observable<Payload>> {
-    protected final CBORFactory jsonFactory;
+    protected final CBORFactory cborFactory;
 
     protected final BehaviorSubject<Payload> subject;
 
     protected BasePayloadSupplier() {
-        this.jsonFactory = new CBORFactory();
+        this.cborFactory = new CBORFactory();
         this.subject = BehaviorSubject.create();
     }
 }

@@ -1,6 +1,12 @@
 package com.netflix.hystrix.examples.reactivesocket;
 
+import com.netflix.hystrix.HystrixCommandKey;
+import com.netflix.hystrix.HystrixThreadPoolKey;
 import com.netflix.hystrix.contrib.reactivesocket.EventStreamEnum;
+import com.netflix.hystrix.contrib.reactivesocket.sample.HystrixUtilizationStream;
+import com.netflix.hystrix.metric.sample.HystrixCommandUtilization;
+import com.netflix.hystrix.metric.sample.HystrixThreadPoolUtilization;
+import com.netflix.hystrix.metric.sample.HystrixUtilization;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.reactivesocket.ConnectionSetupPayload;
 import io.reactivesocket.DefaultReactiveSocket;
@@ -9,18 +15,19 @@ import io.reactivesocket.Payload;
 import io.reactivesocket.ReactiveSocket;
 import io.reactivesocket.netty.tcp.client.ClientTcpDuplexConnection;
 import org.agrona.BitUtil;
-import org.agrona.concurrent.UnsafeBuffer;
 import org.reactivestreams.Publisher;
 import rx.Observable;
 import rx.RxReactiveStreams;
-import rx.observers.TestSubscriber;
+import rx.Subscriber;
+import rx.Subscription;
 
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 public class HystrixMetricsReactiveSocketClient {
-
     public static void main(String[] args) throws InterruptedException {
         System.out.println("Starting HystrixMetricsReactiveSocketClient...");
 
@@ -36,25 +43,45 @@ public class HystrixMetricsReactiveSocketClient {
         client.startAndWait();
         System.out.println("Created client : " + client);
 
-        Payload p = createPayload(EventStreamEnum.METRICS_STREAM);
+        Payload p = createPayload(EventStreamEnum.UTILIZATION_EVENT_STREAM);
 
-        //Publisher<Payload> publisher = client.requestResponse(p);
-        Publisher<Payload> publisher = client.requestSubscription(p);
+        Publisher<Payload> publisher = client.requestResponse(p);
+        //Publisher<Payload> publisher = client.requestSubscription(p);
         Observable<Payload> o = RxReactiveStreams.toObservable(publisher);
 
-        TestSubscriber<Payload> subscriber = new TestSubscriber<>();
 
-        o.subscribe(subscriber);
+        final CountDownLatch latch = new CountDownLatch(1);
 
-        subscriber.awaitTerminalEvent(10000, TimeUnit.MILLISECONDS);
+        Subscription s = o.subscribe(new Subscriber<Payload>() {
+            @Override
+            public void onCompleted() {
+                System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " OnCompleted");
+                latch.countDown();
+            }
 
-        System.out.println("OnNexts : " + subscriber.getOnNextEvents());
-        System.out.println("OnErrors : " + subscriber.getOnErrorEvents());
-        System.out.println("OnCompleted : " + subscriber.getOnCompletedEvents());
+            @Override
+            public void onError(Throwable e) {
+                System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " OnError : " + e);
+                e.printStackTrace();
+                latch.countDown();
+            }
 
-        for (Throwable t : subscriber.getOnErrorEvents()) {
-            t.printStackTrace();
-        }
+            @Override
+            public void onNext(Payload payload) {
+                HystrixUtilization utilization = HystrixUtilizationStream.getInstance().fromByteBuffer(payload.getData());
+                Map<HystrixCommandKey, HystrixCommandUtilization> commandMap = utilization.getCommandUtilizationMap();
+                StringBuilder bldr = new StringBuilder();
+                bldr.append("Command[");
+                for (Map.Entry<HystrixCommandKey, HystrixCommandUtilization> entry: commandMap.entrySet()) {
+                    bldr.append(entry.getKey().name()).append(" -> ").append(entry.getValue().getConcurrentCommandCount()).append(", ");
+                }
+                bldr.append("]");
+                System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " OnNext : " + bldr.toString());
+            }
+        });
+
+        latch.await(10000, TimeUnit.MILLISECONDS);
+        s.unsubscribe();
     }
 
     private static Payload createPayload(EventStreamEnum eventStreamEnum) {

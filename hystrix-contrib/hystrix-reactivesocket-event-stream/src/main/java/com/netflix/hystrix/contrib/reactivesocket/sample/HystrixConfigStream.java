@@ -58,7 +58,7 @@ public class HystrixConfigStream extends BasePayloadSupplier {
 
         try {
             ByteArrayOutputStream bos = new ByteArrayOutputStream();
-            JsonGenerator json = jsonFactory.createGenerator(bos);
+            JsonGenerator json = cborFactory.createGenerator(bos);
 
             json.writeStartObject();
             json.writeStringField("type", "HystrixConfig");

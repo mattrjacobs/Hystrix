@@ -40,7 +40,7 @@ public class HystrixCommandMetricsStream extends StreamingSupplier<HystrixComman
 
             ByteArrayOutputStream bos = new ByteArrayOutputStream();
 
-            JsonGenerator json = jsonFactory.createGenerator(bos);
+            JsonGenerator json = cborFactory.createGenerator(bos);
 
             json.writeStartObject();
             json.writeStringField("type", "HystrixCommand");

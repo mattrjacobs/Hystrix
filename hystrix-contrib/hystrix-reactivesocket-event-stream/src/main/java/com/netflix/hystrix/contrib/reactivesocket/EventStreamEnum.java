@@ -1,6 +1,5 @@
 package com.netflix.hystrix.contrib.reactivesocket;
 
-
 import com.netflix.hystrix.contrib.reactivesocket.metrics.HystrixCollapserMetricsStream;
 import com.netflix.hystrix.contrib.reactivesocket.metrics.HystrixCommandMetricsStream;
 import com.netflix.hystrix.contrib.reactivesocket.metrics.HystrixThreadPoolMetricsStream;
@@ -47,9 +46,7 @@ public enum EventStreamEnum implements Supplier<Observable<Payload>> {
                     HystrixThreadPoolMetricsStream.getInstance().get(),
                     HystrixCollapserMetricsStream.getInstance().get());
         }
-    }
-
-    ;
+    };
 
     private static final Logger logger = LoggerFactory.getLogger(EventStreamEnum.class);
 

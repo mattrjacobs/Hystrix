@@ -56,7 +56,7 @@ public class HystrixRequestEventsStream extends BasePayloadSupplier {
 
         try {
             ByteArrayOutputStream bos = new ByteArrayOutputStream();
-            JsonGenerator json = jsonFactory.createGenerator(bos);
+            JsonGenerator json = cborFactory.createGenerator(bos);
             writeRequestAsJson(json, requestEvents);
             json.close();
 
