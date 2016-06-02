@@ -51,24 +51,25 @@ public class HystrixMetricsReactiveSocketClient {
         reactiveSocket.startAndWait();
     }
 
-    public Publisher<Payload> requestResponse(EventStreamEnum eventStreamEnum) {
-        return reactiveSocket.requestResponse(createPayload(eventStreamEnum));
+    public Publisher<Payload> requestResponse(EventStreamEnum eventStreamEnum, int delayInMs) {
+        return reactiveSocket.requestResponse(createPayload(eventStreamEnum, delayInMs));
     }
 
-    public Publisher<Payload> requestStream(EventStreamEnum eventStreamEnum, int numRequested) {
-        return reactiveSocket.requestStream(createPayload(eventStreamEnum, numRequested));
+    public Publisher<Payload> requestStream(EventStreamEnum eventStreamEnum, int numRequested, int delayInMs) {
+        return reactiveSocket.requestStream(createPayload(eventStreamEnum, numRequested, delayInMs));
     }
 
-    public Publisher<Payload> requestSubscription(EventStreamEnum eventStreamEnum) {
-        return reactiveSocket.requestSubscription(createPayload(eventStreamEnum));
+    public Publisher<Payload> requestSubscription(EventStreamEnum eventStreamEnum, int delayInMs) {
+        return reactiveSocket.requestSubscription(createPayload(eventStreamEnum, delayInMs));
     }
 
-    private static Payload createPayload(EventStreamEnum eventStreamEnum) {
+    private static Payload createPayload(EventStreamEnum eventStreamEnum, int delayInMs) {
         return new Payload() {
             @Override
             public ByteBuffer getData() {
-                return ByteBuffer.allocate(BitUtil.SIZE_OF_INT)
-                        .putInt(0, eventStreamEnum.getTypeId());
+                return ByteBuffer.allocate(BitUtil.SIZE_OF_INT * 2)
+                        .putInt(0, eventStreamEnum.getTypeId())
+                        .putInt(BitUtil.SIZE_OF_INT, delayInMs);
             }
 
             @Override
@@ -78,13 +79,14 @@ public class HystrixMetricsReactiveSocketClient {
         };
     }
 
-    private static Payload createPayload(EventStreamEnum eventStreamEnum, int numRequested) {
+    private static Payload createPayload(EventStreamEnum eventStreamEnum, int numRequested, int delayInMs) {
         return new Payload() {
             @Override
             public ByteBuffer getData() {
-                return ByteBuffer.allocate(BitUtil.SIZE_OF_INT * 2)
+                return ByteBuffer.allocate(BitUtil.SIZE_OF_INT * 3)
                         .putInt(0, eventStreamEnum.getTypeId())
-                        .putInt(BitUtil.SIZE_OF_INT, numRequested);
+                        .putInt(BitUtil.SIZE_OF_INT, numRequested)
+                        .putInt(BitUtil.SIZE_OF_INT * 2, delayInMs);
             }
 
             @Override

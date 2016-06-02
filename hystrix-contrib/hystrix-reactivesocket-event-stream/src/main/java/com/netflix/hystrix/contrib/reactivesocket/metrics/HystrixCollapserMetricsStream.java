@@ -16,6 +16,7 @@
 package com.netflix.hystrix.contrib.reactivesocket.metrics;
 
 import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.netflix.hystrix.HystrixCollapserKey;
 import com.netflix.hystrix.HystrixCollapserMetrics;
 import com.netflix.hystrix.HystrixEventType;
@@ -27,7 +28,7 @@ import java.io.ByteArrayOutputStream;
 import java.util.stream.Stream;
 
 public class HystrixCollapserMetricsStream extends StreamingSupplier<HystrixCollapserMetrics> {
-    private static HystrixCollapserMetricsStream INSTANCE = new HystrixCollapserMetricsStream();
+    private static final HystrixCollapserMetricsStream INSTANCE = new HystrixCollapserMetricsStream();
 
     private HystrixCollapserMetricsStream() {
         super();
@@ -42,6 +43,7 @@ public class HystrixCollapserMetricsStream extends StreamingSupplier<HystrixColl
         return HystrixCollapserMetrics.getInstances().stream();
     }
 
+    @Override
     protected byte[] getPayloadData(final HystrixCollapserMetrics collapserMetrics) {
         byte[] retVal = null;
         try {
@@ -54,24 +56,9 @@ public class HystrixCollapserMetricsStream extends StreamingSupplier<HystrixColl
             json.writeStringField("name", key.name());
             json.writeNumberField("currentTime", System.currentTimeMillis());
 
-            safelyWriteNumberField(json, "rollingCountRequestsBatched", new Func0<Long>() {
-                @Override
-                public Long call() {
-                    return collapserMetrics.getRollingCount(HystrixEventType.Collapser.ADDED_TO_BATCH);
-                }
-            });
-            safelyWriteNumberField(json, "rollingCountBatches", new Func0<Long>() {
-                @Override
-                public Long call() {
-                    return collapserMetrics.getRollingCount(HystrixEventType.Collapser.BATCH_EXECUTED);
-                }
-            });
-            safelyWriteNumberField(json, "rollingCountResponsesFromCache", new Func0<Long>() {
-                @Override
-                public Long call() {
-                    return collapserMetrics.getRollingCount(HystrixEventType.Collapser.RESPONSE_FROM_CACHE);
-                }
-            });
+            safelyWriteNumberField(json, "rollingCountRequestsBatched", () -> collapserMetrics.getRollingCount(HystrixEventType.Collapser.ADDED_TO_BATCH));
+            safelyWriteNumberField(json, "rollingCountBatches", () -> collapserMetrics.getRollingCount(HystrixEventType.Collapser.BATCH_EXECUTED));
+            safelyWriteNumberField(json, "rollingCountResponsesFromCache", () -> collapserMetrics.getRollingCount(HystrixEventType.Collapser.RESPONSE_FROM_CACHE));
 
             // batch size percentiles
             json.writeNumberField("batchSize_mean", collapserMetrics.getBatchSizeMean());
@@ -117,4 +104,8 @@ public class HystrixCollapserMetricsStream extends StreamingSupplier<HystrixColl
         return retVal;
     }
 
+    @Override
+    public byte[] toBytes(JsonNode object) {
+        return new byte[0];
+    }
 }

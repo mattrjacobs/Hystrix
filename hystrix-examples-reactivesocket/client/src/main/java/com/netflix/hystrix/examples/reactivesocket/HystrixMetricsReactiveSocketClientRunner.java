@@ -15,10 +15,17 @@
  */
 package com.netflix.hystrix.examples.reactivesocket;
 
+import com.netflix.hystrix.HystrixCollapserKey;
 import com.netflix.hystrix.HystrixCommandKey;
+import com.netflix.hystrix.HystrixThreadPoolKey;
+import com.netflix.hystrix.config.HystrixCommandConfiguration;
+import com.netflix.hystrix.config.HystrixConfiguration;
+import com.netflix.hystrix.config.HystrixThreadPoolConfiguration;
 import com.netflix.hystrix.contrib.reactivesocket.EventStreamEnum;
 import com.netflix.hystrix.contrib.reactivesocket.client.HystrixMetricsReactiveSocketClient;
-import com.netflix.hystrix.contrib.reactivesocket.sample.HystrixUtilizationStream;
+import com.netflix.hystrix.contrib.reactivesocket.serialize.SerialHystrixConfiguration;
+import com.netflix.hystrix.contrib.reactivesocket.serialize.SerialHystrixUtilization;
+import com.netflix.hystrix.metric.HystrixCommandCompletion;
 import com.netflix.hystrix.metric.sample.HystrixCommandUtilization;
 import com.netflix.hystrix.metric.sample.HystrixUtilization;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -40,9 +47,11 @@ public class HystrixMetricsReactiveSocketClientRunner {
         HystrixMetricsReactiveSocketClient client = new HystrixMetricsReactiveSocketClient("127.0.0.1", 8025, new NioEventLoopGroup());
         client.startAndWait();
 
-        //Publisher<Payload> publisher = client.requestResponse(EventStreamEnum.UTILIZATION_EVENT_STREAM);
-        Publisher<Payload> publisher = client.requestStream(EventStreamEnum.UTILIZATION_EVENT_STREAM, 10);
-        //Publisher<Payload> publisher = client.requestSubscription(EventStreamEnum.UTILIZATION_EVENT_STREAM);
+        final EventStreamEnum eventStreamEnum = EventStreamEnum.UTILIZATION_STREAM;
+
+        //Publisher<Payload> publisher = client.requestResponse(eventStreamEnum, 500);
+        Publisher<Payload> publisher = client.requestStream(eventStreamEnum, 10, 500);
+        //Publisher<Payload> publisher = client.requestSubscription(eventStreamEnum, 500);
         Observable<Payload> o = RxReactiveStreams.toObservable(publisher);
 
         final CountDownLatch latch = new CountDownLatch(1);
@@ -63,14 +72,42 @@ public class HystrixMetricsReactiveSocketClientRunner {
 
             @Override
             public void onNext(Payload payload) {
-                HystrixUtilization utilization = HystrixUtilizationStream.getInstance().fromByteBuffer(payload.getData());
-                Map<HystrixCommandKey, HystrixCommandUtilization> commandMap = utilization.getCommandUtilizationMap();
-                StringBuilder bldr = new StringBuilder();
-                bldr.append("Command[");
-                for (Map.Entry<HystrixCommandKey, HystrixCommandUtilization> entry: commandMap.entrySet()) {
-                    bldr.append(entry.getKey().name()).append(" -> ").append(entry.getValue().getConcurrentCommandCount()).append(", ");
+                final StringBuilder bldr = new StringBuilder();
+
+                switch (eventStreamEnum) {
+                    case UTILIZATION_STREAM:
+                        HystrixUtilization u = SerialHystrixUtilization.fromByteBuffer(payload.getData());
+                        bldr.append("CommandUtil[");
+                        for (Map.Entry<HystrixCommandKey, HystrixCommandUtilization> entry: u.getCommandUtilizationMap().entrySet()) {
+                            bldr.append(entry.getKey().name())
+                                    .append(" -> ")
+                                    .append(entry.getValue().getConcurrentCommandCount())
+                                    .append(", ");
+                        }
+                        bldr.append("]");
+                        break;
+                    case CONFIG_STREAM:
+                        HystrixConfiguration config = SerialHystrixConfiguration.fromByteBuffer(payload.getData());
+                        bldr.append("CommandConfig[");
+                        for (Map.Entry<HystrixCommandKey, HystrixCommandConfiguration> entry: config.getCommandConfig().entrySet()) {
+                            bldr.append(entry.getKey().name())
+                                    .append(" -> ")
+                                    .append(entry.getValue().getExecutionConfig().getIsolationStrategy().name())
+                                    .append(", ");
+                        }
+                        bldr.append("] ThreadPoolConfig[");
+                        for (Map.Entry<HystrixThreadPoolKey, HystrixThreadPoolConfiguration> entry: config.getThreadPoolConfig().entrySet()) {
+                            bldr.append(entry.getKey().name())
+                                    .append(" -> ")
+                                    .append(entry.getValue().getCoreSize())
+                                    .append(", ");
+                        }
+                        bldr.append("]");
+                        break;
+                    default:
+                        throw new RuntimeException("don't have a way to convert from " + eventStreamEnum + " to string yet");
                 }
-                bldr.append("]");
+
                 System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " OnNext : " + bldr.toString());
             }
         });

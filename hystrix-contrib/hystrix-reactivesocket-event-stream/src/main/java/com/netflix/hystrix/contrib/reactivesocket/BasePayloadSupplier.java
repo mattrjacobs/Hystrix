@@ -16,19 +16,55 @@
 package com.netflix.hystrix.contrib.reactivesocket;
 
 import com.fasterxml.jackson.dataformat.cbor.CBORFactory;
+import io.reactivesocket.Frame;
 import io.reactivesocket.Payload;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import rx.Observable;
+import rx.Subscription;
 import rx.subjects.BehaviorSubject;
 
+import java.nio.ByteBuffer;
 import java.util.function.Supplier;
 
-public abstract class BasePayloadSupplier implements Supplier<Observable<Payload>> {
+public abstract class BasePayloadSupplier<T> implements Supplier<Observable<Payload>> {
+    protected final static Logger logger = LoggerFactory.getLogger(BasePayloadSupplier.class);
+
     protected final CBORFactory cborFactory;
 
     protected final BehaviorSubject<Payload> subject;
 
-    protected BasePayloadSupplier() {
+    protected BasePayloadSupplier(Observable<T> stream) {
         this.cborFactory = new CBORFactory();
         this.subject = BehaviorSubject.create();
+
+        Subscription s = stream
+                .doOnNext(n -> System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " Pushing OnNext : " + n))
+                .doOnError(ex -> System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " Pushing OnError : " + ex))
+                .doOnCompleted(() -> System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " Pushing OnCompleted"))
+                .doOnSubscribe(() -> System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " OnSubscribe"))
+                .doOnUnsubscribe(() -> System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " OnUnsubscribe"))
+                .map(this::toBytes)
+                .map(b -> new Payload() {
+                    @Override
+                    public ByteBuffer getData() {
+                        return ByteBuffer.wrap(b);
+                    }
+
+                    @Override
+                    public ByteBuffer getMetadata() {
+                        return Frame.NULL_BYTEBUFFER;
+                    }
+                })
+                .subscribe(subject);
+
+        subject.doOnUnsubscribe(s::unsubscribe);
     }
+
+    @Override
+    public Observable<Payload> get() {
+        return subject;
+    }
+
+    public abstract byte[] toBytes(T object);
 }

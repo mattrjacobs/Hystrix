@@ -36,11 +36,10 @@ public class EventStreamRequestHandler extends RequestHandler {
     public Publisher<Payload> handleRequestResponse(Payload payload) {
         Observable<Payload> singleResponse = Observable.defer(() -> {
             try {
-                int typeId = payload
-                        .getData()
-                        .getInt(0);
+                int typeId = payload.getData().getInt(0);
+                int delayInMs = payload.getData().getInt(BitUtil.SIZE_OF_INT);
                 EventStreamEnum eventStreamEnum = EventStreamEnum.findByTypeId(typeId);
-                return eventStreamEnum.get().take(1);
+                return eventStreamEnum.getOnIntervalInMilliseconds(delayInMs).take(1);
             } catch (Throwable t) {
                 logger.error(t.getMessage(), t);
                 return Observable.error(t);
@@ -54,14 +53,11 @@ public class EventStreamRequestHandler extends RequestHandler {
     public Publisher<Payload> handleRequestStream(Payload payload) {
         Observable<Payload> multiResponse = Observable.defer(() -> {
             try {
-                int typeId = payload
-                        .getData()
-                        .getInt(0);
-                int numRequested = payload
-                        .getData()
-                        .getInt(BitUtil.SIZE_OF_INT);
+                int typeId = payload.getData().getInt(0);
+                int numRequested = payload.getData().getInt(BitUtil.SIZE_OF_INT);
+                int delayInMs = payload.getData().getInt(BitUtil.SIZE_OF_INT * 2);
                 EventStreamEnum eventStreamEnum = EventStreamEnum.findByTypeId(typeId);
-                return eventStreamEnum.get().take(numRequested);
+                return eventStreamEnum.getOnIntervalInMilliseconds(delayInMs).take(numRequested);
             } catch (Throwable t) {
                 logger.error(t.getMessage(), t);
                 return Observable.error(t);
@@ -76,12 +72,10 @@ public class EventStreamRequestHandler extends RequestHandler {
         Observable<Payload> infiniteResponse = Observable
             .defer(() -> {
                 try {
-                    int typeId = payload
-                        .getData()
-                        .getInt(0);
-
+                    int typeId = payload.getData().getInt(0);
+                    int delayInMs = payload.getData().getInt(BitUtil.SIZE_OF_INT);
                     EventStreamEnum eventStreamEnum = EventStreamEnum.findByTypeId(typeId);
-                    return eventStreamEnum.get();
+                    return eventStreamEnum.getOnIntervalInMilliseconds(delayInMs);
                 } catch (Throwable t) {
                     logger.error(t.getMessage(), t);
                     return Observable.error(t);

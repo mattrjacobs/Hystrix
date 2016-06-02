@@ -15,6 +15,7 @@
  */
 package com.netflix.hystrix.examples.reactivesocket;
 
+import com.netflix.hystrix.HystrixCommand;
 import com.netflix.hystrix.HystrixCommandGroupKey;
 import com.netflix.hystrix.HystrixObservableCommand;
 import com.netflix.hystrix.contrib.reactivesocket.EventStreamRequestHandler;
@@ -71,18 +72,23 @@ public class HystrixMetricsReactiveSocketServer {
     }
 
     private static void executeCommands() {
+        final Random r = new Random();
+
         Observable.interval(100, TimeUnit.MILLISECONDS).flatMap(ts ->
-                new SyntheticCommand().observe()
+                        new SyntheticObservableCommand(r).observe()
+        ).subscribe(Subscribers.empty());
+
+        Observable.interval(225, TimeUnit.MILLISECONDS).flatMap(ts ->
+            new SyntheticBlockingCommand(r).observe()
         ).subscribe(Subscribers.empty());
     }
 
-    static class SyntheticCommand extends HystrixObservableCommand<Boolean> {
-
+    static class SyntheticObservableCommand extends HystrixObservableCommand<Boolean> {
         private Random r;
 
-        protected SyntheticCommand() {
+        protected SyntheticObservableCommand(Random r) {
             super(Setter.withGroupKey(HystrixCommandGroupKey.Factory.asKey("Example")));
-            r = new Random();
+            this.r = r;
         }
 
         @Override
@@ -100,6 +106,27 @@ public class HystrixMetricsReactiveSocketServer {
         @Override
         protected Observable<Boolean> resumeWithFallback() {
             return Observable.just(false);
+        }
+    }
+
+    static class SyntheticBlockingCommand extends HystrixCommand<Integer> {
+        private Random r;
+
+        protected SyntheticBlockingCommand(Random r) {
+            super(Setter.withGroupKey(HystrixCommandGroupKey.Factory.asKey("BLOCKING")));
+            this.r = r;
+        }
+
+        @Override
+        protected Integer run() throws Exception {
+            int randomInt = r.nextInt(400);
+            Thread.sleep(randomInt);
+            return randomInt;
+        }
+
+        @Override
+        protected Integer getFallback() {
+            return -1;
         }
     }
 }

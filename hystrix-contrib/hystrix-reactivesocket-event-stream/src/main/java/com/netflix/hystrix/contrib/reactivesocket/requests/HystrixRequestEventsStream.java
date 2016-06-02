@@ -20,41 +20,18 @@ import com.netflix.hystrix.ExecutionResult;
 import com.netflix.hystrix.HystrixEventType;
 import com.netflix.hystrix.contrib.reactivesocket.BasePayloadSupplier;
 import com.netflix.hystrix.metric.HystrixRequestEvents;
-import io.reactivesocket.Frame;
-import io.reactivesocket.Payload;
 import org.agrona.LangUtil;
-import rx.Observable;
-import rx.schedulers.Schedulers;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
 
-public class HystrixRequestEventsStream extends BasePayloadSupplier {
-    private static HystrixRequestEventsStream INSTANCE = new HystrixRequestEventsStream();
+public class HystrixRequestEventsStream extends BasePayloadSupplier<HystrixRequestEvents> {
+    private static final HystrixRequestEventsStream INSTANCE = new HystrixRequestEventsStream();
 
     private HystrixRequestEventsStream() {
-        super();
-
-        com.netflix.hystrix.metric.HystrixRequestEventsStream.getInstance()
-            .observe()
-            .observeOn(Schedulers.computation())
-            .map(this::getPayloadData)
-            .map(b ->
-                new Payload() {
-                    @Override
-                    public ByteBuffer getData() {
-                        return ByteBuffer.wrap(b);
-                    }
-
-                    @Override
-                    public ByteBuffer getMetadata() {
-                        return Frame.NULL_BYTEBUFFER;
-                    }
-            })
-            .subscribe(subject);
+        super(com.netflix.hystrix.metric.HystrixRequestEventsStream.getInstance().observe());
     }
 
     public static HystrixRequestEventsStream getInstance() {
@@ -62,11 +39,7 @@ public class HystrixRequestEventsStream extends BasePayloadSupplier {
     }
 
     @Override
-    public Observable<Payload> get() {
-        return subject;
-    }
-
-    public byte[] getPayloadData(HystrixRequestEvents requestEvents) {
+    public byte[] toBytes(HystrixRequestEvents requestEvents) {
         byte[] retVal = null;
 
         try {

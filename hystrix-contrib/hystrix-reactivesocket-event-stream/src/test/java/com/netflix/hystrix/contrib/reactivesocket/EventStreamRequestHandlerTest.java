@@ -41,7 +41,7 @@ public class EventStreamRequestHandlerTest {
             public ByteBuffer getData() {
                 return ByteBuffer
                     .allocate(BitUtil.SIZE_OF_INT)
-                    .putInt(EventStreamEnum.METRICS_STREAM.getTypeId());
+                    .putInt(EventStreamEnum.GENERAL_DASHBOARD_STREAM.getTypeId());
             }
 
             @Override
@@ -120,7 +120,7 @@ public class EventStreamRequestHandlerTest {
             public ByteBuffer getData() {
                 return ByteBuffer
                     .allocate(BitUtil.SIZE_OF_INT)
-                    .putInt(EventStreamEnum.METRICS_STREAM.getTypeId());
+                    .putInt(EventStreamEnum.GENERAL_DASHBOARD_STREAM.getTypeId());
             }
 
             @Override

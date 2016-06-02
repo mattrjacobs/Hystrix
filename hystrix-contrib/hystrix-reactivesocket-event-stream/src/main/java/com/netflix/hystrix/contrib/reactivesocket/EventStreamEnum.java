@@ -15,47 +15,59 @@
  */
 package com.netflix.hystrix.contrib.reactivesocket;
 
+import com.netflix.hystrix.config.HystrixConfigurationStream;
 import com.netflix.hystrix.contrib.reactivesocket.metrics.HystrixCollapserMetricsStream;
 import com.netflix.hystrix.contrib.reactivesocket.metrics.HystrixCommandMetricsStream;
 import com.netflix.hystrix.contrib.reactivesocket.metrics.HystrixThreadPoolMetricsStream;
 import com.netflix.hystrix.contrib.reactivesocket.requests.HystrixRequestEventsStream;
-import com.netflix.hystrix.contrib.reactivesocket.sample.HystrixConfigStream;
-import com.netflix.hystrix.contrib.reactivesocket.sample.HystrixUtilizationStream;
+import com.netflix.hystrix.contrib.reactivesocket.serialize.SerialHystrixConfiguration;
+import com.netflix.hystrix.contrib.reactivesocket.serialize.SerialHystrixMetric;
+import com.netflix.hystrix.contrib.reactivesocket.serialize.SerialHystrixUtilization;
+import com.netflix.hystrix.metric.sample.HystrixUtilizationStream;
 import io.reactivesocket.Payload;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import rx.Observable;
 
 import java.util.Arrays;
-import java.util.function.Supplier;
 
-public enum EventStreamEnum implements Supplier<Observable<Payload>> {
+public enum EventStreamEnum implements TimedObservableSupplier<Payload> {
 
     CONFIG_STREAM(1) {
         @Override
-        public Observable<Payload> get() {
-            logger.info("streaming config data");
-            return HystrixConfigStream.getInstance().get();
+        public Observable<Payload> getOnIntervalInMilliseconds(int delay) {
+            return new HystrixConfigurationStream(delay)
+                    .observe()
+                    .doOnNext(n -> System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " Pushing OnNext : " + n))
+                    .doOnError(ex -> System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " Pushing OnError : " + ex))
+                    .doOnCompleted(() -> System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " Pushing OnCompleted"))
+                    .doOnSubscribe(() -> System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " OnSubscribe"))
+                    .doOnUnsubscribe(() -> System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " OnUnsubscribe"))
+                    .map(SerialHystrixConfiguration::toBytes)
+                    .map(SerialHystrixMetric::toPayload);
         }
     },
     REQUEST_EVENT_STREAM(2) {
         @Override
-        public Observable<Payload> get() {
-            logger.info("streaming request events");
+        public Observable<Payload> getOnIntervalInMilliseconds(int delay) {
             return HystrixRequestEventsStream.getInstance().get();
         }
     },
-    UTILIZATION_EVENT_STREAM(3) {
+    UTILIZATION_STREAM(3) {
         @Override
-        public Observable<Payload> get() {
-            logger.info("streaming utilization events");
-            return HystrixUtilizationStream.getInstance().get();
+        public Observable<Payload> getOnIntervalInMilliseconds(int delay) {
+            return new HystrixUtilizationStream(delay)
+                    .observe()
+                    .doOnNext(n -> System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " Pushing OnNext : " + n))
+                    .doOnError(ex -> System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " Pushing OnError : " + ex))
+                    .doOnCompleted(() -> System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " Pushing OnCompleted"))
+                    .doOnSubscribe(() -> System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " OnSubscribe"))
+                    .doOnUnsubscribe(() -> System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " OnUnsubscribe"))
+                    .map(SerialHystrixUtilization::toBytes)
+                    .map(SerialHystrixMetric::toPayload);
         }
     },
-    METRICS_STREAM(4) {
+    GENERAL_DASHBOARD_STREAM(4) {
         @Override
-        public Observable<Payload> get() {
-            logger.info("streaming metrics");
+        public Observable<Payload> getOnIntervalInMilliseconds(int delay) {
             return Observable.merge(
                     HystrixCommandMetricsStream.getInstance().get(),
                     HystrixThreadPoolMetricsStream.getInstance().get(),
@@ -63,9 +75,7 @@ public enum EventStreamEnum implements Supplier<Observable<Payload>> {
         }
     };
 
-    private static final Logger logger = LoggerFactory.getLogger(EventStreamEnum.class);
-
-    private int typeId;
+    private final int typeId;
 
     EventStreamEnum(int typeId) {
         this.typeId = typeId;

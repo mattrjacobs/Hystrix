@@ -16,49 +16,47 @@
 package com.netflix.hystrix.contrib.reactivesocket;
 
 import com.fasterxml.jackson.core.JsonGenerator;
-import io.reactivesocket.Frame;
+import com.fasterxml.jackson.databind.JsonNode;
 import io.reactivesocket.Payload;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import rx.Observable;
 import rx.functions.Func0;
-import rx.schedulers.Schedulers;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
-public abstract class StreamingSupplier<T> extends BasePayloadSupplier {
+public abstract class StreamingSupplier<T> extends BasePayloadSupplier<JsonNode> {
 
-    protected Logger logger = LoggerFactory.getLogger(StreamingSupplier.class);
+    protected final Logger logger = LoggerFactory.getLogger(StreamingSupplier.class);
 
     protected StreamingSupplier() {
+        super(Observable.just(null));
 
-        Observable
-            .interval(500, TimeUnit.MILLISECONDS, Schedulers.computation())
-            .doOnNext(i ->
-                getStream()
-                    .filter(this::filter)
-                    .map(this::getPayloadData)
-                    .forEach(b -> {
-                        Payload p = new Payload() {
-                            @Override
-                            public ByteBuffer getData() {
-                                return ByteBuffer.wrap(b);
-                            }
-
-                            @Override
-                            public ByteBuffer getMetadata() {
-                                return Frame.NULL_BYTEBUFFER;
-                            }
-                        };
-
-                        subject.onNext(p);
-                    })
-            )
-            .retry()
-            .subscribe();
+//        Observable
+//            .interval(500, TimeUnit.MILLISECONDS, Schedulers.computation())
+//            .doOnNext(i ->
+//                getStream()
+//                    .filter(this::filter)
+//                    .map(this::getPayloadData)
+//                    .forEach(b -> {
+//                        Payload p = new Payload() {
+//                            @Override
+//                            public ByteBuffer getData() {
+//                                return ByteBuffer.wrap(b);
+//                            }
+//
+//                            @Override
+//                            public ByteBuffer getMetadata() {
+//                                return Frame.NULL_BYTEBUFFER;
+//                            }
+//                        };
+//
+//                        subject.onNext(p);
+//                    })
+//            )
+//            .retry()
+//            .subscribe();
     }
 
     public boolean filter(T t) {

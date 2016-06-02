@@ -50,7 +50,7 @@ public class HystrixCommandMetricsStreamTest {
     }
 
     class TestCommand extends HystrixCommand<Boolean> {
-        CountDownLatch latch;
+        final CountDownLatch latch;
         protected TestCommand(CountDownLatch latch) {
             super(HystrixCommandGroupKey.Factory.asKey("HystrixMetricsPollerTest"));
             this.latch = latch;

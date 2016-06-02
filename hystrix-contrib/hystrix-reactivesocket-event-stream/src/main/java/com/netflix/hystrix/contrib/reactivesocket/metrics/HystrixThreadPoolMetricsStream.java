@@ -16,6 +16,7 @@
 package com.netflix.hystrix.contrib.reactivesocket.metrics;
 
 import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.netflix.hystrix.HystrixEventType;
 import com.netflix.hystrix.HystrixThreadPoolKey;
 import com.netflix.hystrix.HystrixThreadPoolMetrics;
@@ -29,7 +30,7 @@ import java.io.ByteArrayOutputStream;
 import java.util.stream.Stream;
 
 public class HystrixThreadPoolMetricsStream extends StreamingSupplier<HystrixThreadPoolMetrics> {
-    private static HystrixThreadPoolMetricsStream INSTANCE = new HystrixThreadPoolMetricsStream();
+    private static final HystrixThreadPoolMetricsStream INSTANCE = new HystrixThreadPoolMetricsStream();
 
     private HystrixThreadPoolMetricsStream() {
         super();
@@ -47,6 +48,11 @@ public class HystrixThreadPoolMetricsStream extends StreamingSupplier<HystrixThr
     @Override
     public Observable<Payload> get() {
         return super.get();
+    }
+
+    @Override
+    public byte[] toBytes(JsonNode object) {
+        return new byte[0];
     }
 
     @Override
@@ -71,19 +77,9 @@ public class HystrixThreadPoolMetricsStream extends StreamingSupplier<HystrixThr
             json.writeNumberField("currentPoolSize", threadPoolMetrics.getCurrentPoolSize().intValue());
             json.writeNumberField("currentQueueSize", threadPoolMetrics.getCurrentQueueSize().intValue());
             json.writeNumberField("currentTaskCount", threadPoolMetrics.getCurrentTaskCount().longValue());
-            safelyWriteNumberField(json, "rollingCountThreadsExecuted", new Func0<Long>() {
-                @Override
-                public Long call() {
-                    return threadPoolMetrics.getRollingCount(HystrixEventType.ThreadPool.EXECUTED);
-                }
-            });
+            safelyWriteNumberField(json, "rollingCountThreadsExecuted", () -> threadPoolMetrics.getRollingCount(HystrixEventType.ThreadPool.EXECUTED));
             json.writeNumberField("rollingMaxActiveThreads", threadPoolMetrics.getRollingMaxActiveThreads());
-            safelyWriteNumberField(json, "rollingCountCommandRejections", new Func0<Long>() {
-                @Override
-                public Long call() {
-                    return threadPoolMetrics.getRollingCount(HystrixEventType.ThreadPool.REJECTED);
-                }
-            });
+            safelyWriteNumberField(json, "rollingCountCommandRejections", () -> threadPoolMetrics.getRollingCount(HystrixEventType.ThreadPool.REJECTED));
 
             json.writeNumberField("propertyValue_queueSizeRejectionThreshold", threadPoolMetrics.getProperties().queueSizeRejectionThreshold().get());
             json.writeNumberField("propertyValue_metricsRollingStatisticalWindowInMilliseconds", threadPoolMetrics.getProperties().metricsRollingStatisticalWindowInMilliseconds().get());

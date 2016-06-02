@@ -1,34 +1,14 @@
-/**
- * Copyright 2016 Netflix, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-package com.netflix.hystrix.contrib.reactivesocket.sample;
+package com.netflix.hystrix.contrib.reactivesocket.serialize;
 
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.cbor.CBORParser;
 import com.netflix.hystrix.HystrixCommandKey;
 import com.netflix.hystrix.HystrixThreadPoolKey;
-import com.netflix.hystrix.contrib.reactivesocket.BasePayloadSupplier;
 import com.netflix.hystrix.metric.sample.HystrixCommandUtilization;
 import com.netflix.hystrix.metric.sample.HystrixThreadPoolUtilization;
 import com.netflix.hystrix.metric.sample.HystrixUtilization;
-import io.reactivesocket.Frame;
-import io.reactivesocket.Payload;
 import org.agrona.LangUtil;
-import rx.Observable;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -37,43 +17,9 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 
-public class HystrixUtilizationStream extends BasePayloadSupplier {
-    private static final HystrixUtilizationStream INSTANCE = new HystrixUtilizationStream();
+public class SerialHystrixUtilization extends SerialHystrixMetric {
 
-    private final ObjectMapper mapper = new ObjectMapper();
-
-    private HystrixUtilizationStream() {
-        super();
-
-        com.netflix.hystrix.metric.sample.HystrixUtilizationStream stream
-            = new com.netflix.hystrix.metric.sample.HystrixUtilizationStream(100);
-        stream
-            .observe()
-            .map(this::getPayloadData)
-            .map(b -> new Payload() {
-                @Override
-                public ByteBuffer getData() {
-                    return ByteBuffer.wrap(b);
-                }
-
-                @Override
-                public ByteBuffer getMetadata() {
-                    return Frame.NULL_BYTEBUFFER;
-                }
-            })
-            .subscribe(subject);
-    }
-
-    public static HystrixUtilizationStream getInstance() {
-        return INSTANCE;
-    }
-
-    @Override
-    public Observable<Payload> get() {
-        return subject;
-    }
-
-    public byte[] getPayloadData(HystrixUtilization utilization) {
+    public static byte[] toBytes(HystrixUtilization utilization) {
         byte[] retVal = null;
 
         try {
@@ -109,22 +55,7 @@ public class HystrixUtilizationStream extends BasePayloadSupplier {
         return retVal;
     }
 
-    private static void writeCommandUtilizationJson(JsonGenerator json, HystrixCommandKey key, HystrixCommandUtilization utilization) throws IOException {
-        json.writeObjectFieldStart(key.name());
-        json.writeNumberField("activeCount", utilization.getConcurrentCommandCount());
-        json.writeEndObject();
-    }
-
-    private static void writeThreadPoolUtilizationJson(JsonGenerator json, HystrixThreadPoolKey threadPoolKey, HystrixThreadPoolUtilization utilization) throws IOException {
-        json.writeObjectFieldStart(threadPoolKey.name());
-        json.writeNumberField("activeCount", utilization.getCurrentActiveCount());
-        json.writeNumberField("queueSize", utilization.getCurrentQueueSize());
-        json.writeNumberField("corePoolSize", utilization.getCurrentCorePoolSize());
-        json.writeNumberField("poolSize", utilization.getCurrentPoolSize());
-        json.writeEndObject();
-    }
-
-    public HystrixUtilization fromByteBuffer(ByteBuffer bb) {
+    public static HystrixUtilization fromByteBuffer(ByteBuffer bb) {
         byte[] byteArray = new byte[bb.remaining()];
         bb.get(byteArray);
 
@@ -134,6 +65,7 @@ public class HystrixUtilizationStream extends BasePayloadSupplier {
         try {
             CBORParser parser = cborFactory.createParser(byteArray);
             JsonNode rootNode = mapper.readTree(parser);
+
             Iterator<Map.Entry<String, JsonNode>> commands = rootNode.path("commands").fields();
             Iterator<Map.Entry<String, JsonNode>> threadPools = rootNode.path("threadpools").fields();
 
@@ -159,5 +91,20 @@ public class HystrixUtilizationStream extends BasePayloadSupplier {
             System.out.println("IO Exception : " + ioe);
         }
         return new HystrixUtilization(commandUtilizationMap, threadPoolUtilizationMap);
+    }
+
+    private static void writeCommandUtilizationJson(JsonGenerator json, HystrixCommandKey key, HystrixCommandUtilization utilization) throws IOException {
+        json.writeObjectFieldStart(key.name());
+        json.writeNumberField("activeCount", utilization.getConcurrentCommandCount());
+        json.writeEndObject();
+    }
+
+    private static void writeThreadPoolUtilizationJson(JsonGenerator json, HystrixThreadPoolKey threadPoolKey, HystrixThreadPoolUtilization utilization) throws IOException {
+        json.writeObjectFieldStart(threadPoolKey.name());
+        json.writeNumberField("activeCount", utilization.getCurrentActiveCount());
+        json.writeNumberField("queueSize", utilization.getCurrentQueueSize());
+        json.writeNumberField("corePoolSize", utilization.getCurrentCorePoolSize());
+        json.writeNumberField("poolSize", utilization.getCurrentPoolSize());
+        json.writeEndObject();
     }
 }

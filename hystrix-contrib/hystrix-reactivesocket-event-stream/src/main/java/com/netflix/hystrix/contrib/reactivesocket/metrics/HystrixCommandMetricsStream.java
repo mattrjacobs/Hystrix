@@ -16,6 +16,7 @@
 package com.netflix.hystrix.contrib.reactivesocket.metrics;
 
 import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.netflix.hystrix.HystrixCircuitBreaker;
 import com.netflix.hystrix.HystrixCommandKey;
 import com.netflix.hystrix.HystrixCommandMetrics;
@@ -76,102 +77,22 @@ public class HystrixCommandMetricsStream extends StreamingSupplier<HystrixComman
             json.writeNumberField("requestCount", healthCounts.getTotalRequests());
 
             // rolling counters
-            safelyWriteNumberField(json, "rollingCountBadRequests", new Func0<Long>() {
-                @Override
-                public Long call() {
-                    return commandMetrics.getRollingCount(HystrixEventType.BAD_REQUEST);
-                }
-            });
-            safelyWriteNumberField(json, "rollingCountCollapsedRequests", new Func0<Long>() {
-                @Override
-                public Long call() {
-                    return commandMetrics.getRollingCount(HystrixEventType.COLLAPSED);
-                }
-            });
-            safelyWriteNumberField(json, "rollingCountEmit", new Func0<Long>() {
-                @Override
-                public Long call() {
-                    return commandMetrics.getRollingCount(HystrixEventType.EMIT);
-                }
-            });
-            safelyWriteNumberField(json, "rollingCountExceptionsThrown", new Func0<Long>() {
-                @Override
-                public Long call() {
-                    return commandMetrics.getRollingCount(HystrixEventType.EXCEPTION_THROWN);
-                }
-            });
-            safelyWriteNumberField(json, "rollingCountFailure", new Func0<Long>() {
-                @Override
-                public Long call() {
-                    return commandMetrics.getRollingCount(HystrixEventType.FAILURE);
-                }
-            });
-            safelyWriteNumberField(json, "rollingCountFallbackEmit", new Func0<Long>() {
-                @Override
-                public Long call() {
-                    return commandMetrics.getRollingCount(HystrixEventType.FALLBACK_EMIT);
-                }
-            });
-            safelyWriteNumberField(json, "rollingCountFallbackFailure", new Func0<Long>() {
-                @Override
-                public Long call() {
-                    return commandMetrics.getRollingCount(HystrixEventType.FALLBACK_FAILURE);
-                }
-            });
-            safelyWriteNumberField(json, "rollingCountFallbackMissing", new Func0<Long>() {
-                @Override
-                public Long call() {
-                    return commandMetrics.getRollingCount(HystrixEventType.FALLBACK_MISSING);
-                }
-            });
-            safelyWriteNumberField(json, "rollingCountFallbackRejection", new Func0<Long>() {
-                @Override
-                public Long call() {
-                    return commandMetrics.getRollingCount(HystrixEventType.FALLBACK_REJECTION);
-                }
-            });
-            safelyWriteNumberField(json, "rollingCountFallbackSuccess", new Func0<Long>() {
-                @Override
-                public Long call() {
-                    return commandMetrics.getRollingCount(HystrixEventType.FALLBACK_SUCCESS);
-                }
-            });
-            safelyWriteNumberField(json, "rollingCountResponsesFromCache", new Func0<Long>() {
-                @Override
-                public Long call() {
-                    return commandMetrics.getRollingCount(HystrixEventType.RESPONSE_FROM_CACHE);
-                }
-            });
-            safelyWriteNumberField(json, "rollingCountSemaphoreRejected", new Func0<Long>() {
-                @Override
-                public Long call() {
-                    return commandMetrics.getRollingCount(HystrixEventType.SEMAPHORE_REJECTED);
-                }
-            });
-            safelyWriteNumberField(json, "rollingCountShortCircuited", new Func0<Long>() {
-                @Override
-                public Long call() {
-                    return commandMetrics.getRollingCount(HystrixEventType.SHORT_CIRCUITED);
-                }
-            });
-            safelyWriteNumberField(json, "rollingCountSuccess", new Func0<Long>() {
-                @Override
-                public Long call() {
-                    return commandMetrics.getRollingCount(HystrixEventType.SUCCESS);
-                }
-            });
-            safelyWriteNumberField(json, "rollingCountThreadPoolRejected", new Func0<Long>() {
-                @Override
-                public Long call() {
-                    return commandMetrics.getRollingCount(HystrixEventType.THREAD_POOL_REJECTED);
-                }
-            });
-            safelyWriteNumberField(json, "rollingCountTimeout", new Func0<Long>() {
-                @Override
-                public Long call() {
-                    return commandMetrics.getRollingCount(HystrixEventType.TIMEOUT);
-                }
-            });
+            safelyWriteNumberField(json, "rollingCountBadRequests", () -> commandMetrics.getRollingCount(HystrixEventType.BAD_REQUEST));
+            safelyWriteNumberField(json, "rollingCountCollapsedRequests", () -> commandMetrics.getRollingCount(HystrixEventType.COLLAPSED));
+            safelyWriteNumberField(json, "rollingCountEmit", () -> commandMetrics.getRollingCount(HystrixEventType.EMIT));
+            safelyWriteNumberField(json, "rollingCountExceptionsThrown", () -> commandMetrics.getRollingCount(HystrixEventType.EXCEPTION_THROWN));
+            safelyWriteNumberField(json, "rollingCountFailure", () -> commandMetrics.getRollingCount(HystrixEventType.FAILURE));
+            safelyWriteNumberField(json, "rollingCountFallbackEmit", () -> commandMetrics.getRollingCount(HystrixEventType.FALLBACK_EMIT));
+            safelyWriteNumberField(json, "rollingCountFallbackFailure", () -> commandMetrics.getRollingCount(HystrixEventType.FALLBACK_FAILURE));
+            safelyWriteNumberField(json, "rollingCountFallbackMissing", () -> commandMetrics.getRollingCount(HystrixEventType.FALLBACK_MISSING));
+            safelyWriteNumberField(json, "rollingCountFallbackRejection", () -> commandMetrics.getRollingCount(HystrixEventType.FALLBACK_REJECTION));
+            safelyWriteNumberField(json, "rollingCountFallbackSuccess", () -> commandMetrics.getRollingCount(HystrixEventType.FALLBACK_SUCCESS));
+            safelyWriteNumberField(json, "rollingCountResponsesFromCache", () -> commandMetrics.getRollingCount(HystrixEventType.RESPONSE_FROM_CACHE));
+            safelyWriteNumberField(json, "rollingCountSemaphoreRejected", () -> commandMetrics.getRollingCount(HystrixEventType.SEMAPHORE_REJECTED));
+            safelyWriteNumberField(json, "rollingCountShortCircuited", () -> commandMetrics.getRollingCount(HystrixEventType.SHORT_CIRCUITED));
+            safelyWriteNumberField(json, "rollingCountSuccess", () -> commandMetrics.getRollingCount(HystrixEventType.SUCCESS));
+            safelyWriteNumberField(json, "rollingCountThreadPoolRejected", () -> commandMetrics.getRollingCount(HystrixEventType.THREAD_POOL_REJECTED));
+            safelyWriteNumberField(json, "rollingCountTimeout", () -> commandMetrics.getRollingCount(HystrixEventType.TIMEOUT));
 
             json.writeNumberField("currentConcurrentExecutionCount", commandMetrics.getCurrentConcurrentExecutionCount());
             json.writeNumberField("rollingMaxConcurrentExecutionCount", commandMetrics.getRollingMaxConcurrentExecutions());
@@ -248,6 +169,11 @@ public class HystrixCommandMetricsStream extends StreamingSupplier<HystrixComman
         }
 
         return retVal;
+    }
+
+    @Override
+    public byte[] toBytes(JsonNode object) {
+        return new byte[0];
     }
 }
 
