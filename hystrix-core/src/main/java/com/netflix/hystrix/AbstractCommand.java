@@ -338,6 +338,48 @@ import java.util.concurrent.atomic.AtomicReference;
 
     protected abstract Observable<R> getFallbackObservable();
 
+    public Observable<R> toObservable() {
+        final AbstractCommand<R> _cmd = this;
+
+        return Observable.defer(new Func0<Observable<R>>() {
+            @Override
+            public Observable<R> call() {
+                State initialState = State.create();
+
+                return Observable.just(initialState)
+                        .flatMap(new Func1<State, Observable<State>>() {
+                            @Override
+                            public Observable<State> call(State state) {
+                                return null;
+                            }
+                        })
+
+
+
+
+//                if (properties.requestLogEnabled().get()) {
+//                    // log this command execution regardless of what happened
+//                    if (currentRequestLog != null) {
+//                        currentRequestLog.addExecutedCommand(_cmd);
+//                    }
+//                }
+//
+//
+//
+//
+//
+//                return hystrixWrapping.concatMapEager(new Func1<State, Observable<R>>() {
+//                    @Override
+//                    public Observable<R> call(State state) {
+//                        return state.getValues();
+//                    }
+//                });
+            }
+        });
+
+        //Observable<R> userExecution = getExecutionObservable();
+    }
+
     /**
      * Used for asynchronous execution of command with a callback by subscribing to the {@link Observable}.
      * <p>
@@ -360,7 +402,7 @@ import java.util.concurrent.atomic.AtomicReference;
      * @throws IllegalStateException
      *             if invoked more than once
      */
-    public Observable<R> toObservable() {
+    public Observable<R> toObservableSideEffecting() {
         final AbstractCommand<R> _cmd = this;
 
         //doOnCompleted handler already did all of the SUCCESS work
