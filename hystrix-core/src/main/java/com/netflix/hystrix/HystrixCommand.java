@@ -18,6 +18,8 @@ package com.netflix.hystrix;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
+import com.netflix.hystrix.state.State;
+import rx.Notification;
 import rx.Observable;
 import rx.Observable.OnSubscribe;
 import rx.Subscriber;
@@ -312,6 +314,57 @@ public abstract class HystrixCommand<R> extends AbstractCommand<R> implements Hy
         });
     }
 
+    @Override
+    final protected Observable<State<R>> getExecutionStateObservable() {
+        final HystrixInvokable<R> _invokable = this;
+
+        return Observable.defer(new Func0<Observable<State<R>>>() {
+            @Override
+            public Observable<State<R>> call() {
+                final State<R> initialState = State.<R>create(getCommandDataStyle(), (Class<HystrixInvokable>) _invokable.getClass(), commandKey).withExecutionOnThread(Thread.currentThread());
+                Observable<State<R>> executionStarted = Observable.just(initialState);
+                Observable<State<R>> executionValue = Observable.defer(new Func0<Observable<State<R>>>() {
+                    @Override
+                    public Observable<State<R>> call() {
+                        try {
+                            State<R> stateWithValue = initialState.withExecutionNotification(Notification.createOnNext(run()));
+                            return Observable.just(stateWithValue, stateWithValue.withExecutionNotification(Notification.<R>createOnCompleted()));
+                        } catch (Throwable ex) {
+                            return Observable.just(initialState.withExecutionNotification(Notification.<R>createOnError(ex)));
+                        }
+                    }
+                });
+                return executionValue.startWith(executionStarted);
+            }
+        });
+    }
+
+    @Override
+    final protected Observable<State<R>> getFallbackStateObservable(final State<R> executionState) {
+        final HystrixInvokable<R> _invokable = this;
+
+        return Observable.defer(new Func0<Observable<State<R>>>() {
+            @Override
+            public Observable<State<R>> call() {
+                final State<R> initialFallbackState = executionState.withFallbackExecutionOnThread(Thread.currentThread());
+                Observable<State<R>> fallbackExecutionStarted = Observable.just(initialFallbackState);
+                Observable<State<R>> fallbackExecutionValue = Observable.defer(new Func0<Observable<State<R>>>() {
+                    @Override
+                    public Observable<State<R>> call() {
+                        try {
+                            State<R> stateWithFallbackValue = initialFallbackState.withFallbackExecutionNotification(Notification.createOnNext(getFallback()));
+                            return Observable.just(stateWithFallbackValue, stateWithFallbackValue.withFallbackExecutionNotification(Notification.<R>createOnCompleted()));
+                        } catch (Throwable ex) {
+                            return Observable.just(initialFallbackState.withFallbackExecutionNotification(Notification.<R>createOnError(ex)));
+                        }
+                    }
+                });
+                return fallbackExecutionValue.startWith(fallbackExecutionStarted);
+            }
+        });
+    }
+
+
     /**
      * Used for synchronous execution of command.
      * 
@@ -404,4 +457,8 @@ public abstract class HystrixCommand<R> extends AbstractCommand<R> implements Hy
         return "getFallback";
     }
 
+    @Override
+    protected CommandDataStyle getCommandDataStyle() {
+        return CommandDataStyle.SCALAR;
+    }
 }

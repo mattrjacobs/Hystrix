@@ -385,28 +385,28 @@ public abstract class HystrixCollapser<BatchReturnType, ResponseType, RequestArg
                 final boolean isRequestCacheEnabled = getProperties().requestCacheEnabled().get();
                 final String cacheKey = getCacheKey();
 
-                /* try from cache first */
-                if (isRequestCacheEnabled) {
-                    HystrixCachedObservable<ResponseType> fromCache = requestCache.get(cacheKey);
-                    if (fromCache != null) {
-                        metrics.markResponseFromCache();
-                        return fromCache.toObservable();
-                    }
-                }
+//                /* try from cache first */
+//                if (isRequestCacheEnabled) {
+//                    HystrixCachedObservable<ResponseType> fromCache = requestCache.get(cacheKey);
+//                    if (fromCache != null) {
+//                        metrics.markResponseFromCache();
+//                        return fromCache.toObservable();
+//                    }
+//                }
 
                 RequestCollapser<BatchReturnType, ResponseType, RequestArgumentType> requestCollapser = collapserFactory.getRequestCollapser(collapserInstanceWrapper);
                 Observable<ResponseType> response = requestCollapser.submitRequest(getRequestArgument());
 
-                if (isRequestCacheEnabled && cacheKey != null) {
-                    HystrixCachedObservable<ResponseType> toCache = HystrixCachedObservable.from(response);
-                    HystrixCachedObservable<ResponseType> fromCache = requestCache.putIfAbsent(cacheKey, toCache);
-                    if (fromCache == null) {
-                        return toCache.toObservable();
-                    } else {
-                        toCache.unsubscribe();
-                        return fromCache.toObservable();
-                    }
-                }
+//                if (isRequestCacheEnabled && cacheKey != null) {
+//                    HystrixCachedObservable<ResponseType> toCache = HystrixCachedObservable.from(response);
+//                    HystrixCachedObservable<ResponseType> fromCache = requestCache.putIfAbsent(cacheKey, toCache);
+//                    if (fromCache == null) {
+//                        return toCache.toObservable();
+//                    } else {
+//                        toCache.unsubscribe();
+//                        return fromCache.toObservable();
+//                    }
+//                }
                 return response;
             }
         });

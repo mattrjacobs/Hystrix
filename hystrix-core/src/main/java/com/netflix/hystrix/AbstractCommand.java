@@ -21,6 +21,7 @@ import com.netflix.hystrix.exception.HystrixBadRequestException;
 import com.netflix.hystrix.exception.HystrixRuntimeException;
 import com.netflix.hystrix.exception.HystrixRuntimeException.FailureType;
 import com.netflix.hystrix.exception.HystrixTimeoutException;
+import com.netflix.hystrix.state.State;
 import com.netflix.hystrix.strategy.HystrixPlugins;
 import com.netflix.hystrix.strategy.concurrency.HystrixConcurrencyStrategy;
 import com.netflix.hystrix.strategy.concurrency.HystrixContextRunnable;
@@ -38,25 +39,33 @@ import org.slf4j.LoggerFactory;
 import rx.Notification;
 import rx.Observable;
 import rx.Observable.Operator;
+import rx.Scheduler;
 import rx.Subscriber;
 import rx.Subscription;
 import rx.functions.Action0;
 import rx.functions.Action1;
 import rx.functions.Func0;
 import rx.functions.Func1;
+import rx.functions.Func2;
+import rx.subjects.BehaviorSubject;
 import rx.subjects.ReplaySubject;
 import rx.subscriptions.CompositeSubscription;
 
 import java.lang.ref.Reference;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /* package */abstract class AbstractCommand<R> implements HystrixInvokableInfo<R>, HystrixObservable<R> {
+    //TODO This is an infinite observable - needs to get a terminal?
+    private final BehaviorSubject<State<R>> stateCache = BehaviorSubject.create();
+
     private static final Logger logger = LoggerFactory.getLogger(AbstractCommand.class);
     protected final HystrixCircuitBreaker circuitBreaker;
     protected final HystrixThreadPool threadPool;
@@ -338,46 +347,301 @@ import java.util.concurrent.atomic.AtomicReference;
 
     protected abstract Observable<R> getFallbackObservable();
 
+    protected abstract Observable<State<R>> getExecutionStateObservable();
+
+    protected abstract Observable<State<R>> getFallbackStateObservable(State<R> executionState);
+
+    protected abstract CommandDataStyle getCommandDataStyle();
+
     public Observable<R> toObservable() {
         final AbstractCommand<R> _cmd = this;
+        final HystrixInvokable<R>  _invokable = this;
 
         return Observable.defer(new Func0<Observable<R>>() {
             @Override
             public Observable<R> call() {
-                State initialState = State.create();
+                if (stateCache.hasValue()) {
+                    IllegalStateException ex = new IllegalStateException("This instance can only be executed once. Please instantiate a new instance.");
+                    //TODO make a new error type for this
+                    return Observable.error(new HystrixRuntimeException(FailureType.BAD_REQUEST_EXCEPTION, _cmd.getClass(), getLogMessagePrefix() + " command executed multiple times - this is not permitted.", ex, null));
+                }
 
-                return Observable.just(initialState)
-                        .flatMap(new Func1<State, Observable<State>>() {
+                final State<R> initialState = State.create(getCommandDataStyle(), (Class<HystrixInvokable>) _invokable.getClass(), _cmd.commandKey);
+                stateCache.onNext(initialState); //if this command instance gets observed again, cache will be non-empty
+
+                if (properties.requestLogEnabled().get()) {
+                    // log this command execution regardless of what happened
+                    if (currentRequestLog != null) {
+                        currentRequestLog.addExecutedCommand(_cmd);
+                    }
+                }
+
+                final String cacheKey = getCacheKey();
+                final boolean requestCacheEnabled = properties.requestCacheEnabled().get() && (cacheKey != null);
+
+                if (requestCacheEnabled) {
+                    Observable<R> fromCache = checkCacheForPreviouslyExecutedCommand(requestCache, cacheKey);
+                    if (fromCache != null) {
+                        return fromCache;
+                    }
+                }
+
+                final Observable<State<R>> executionAttempt = applyCircuitBreaker(circuitBreaker, initialState, new Func0<Observable<State<R>>>() {
+
+                    @Override
+                    public Observable<State<R>> call() {
+                        final Observable<State<R>> bulkheadApplied = applyBulkhead(getExecutionStateObservable(), initialState);
+                        final Observable<State<R>> timeoutApplied = applyTimeout(bulkheadApplied, initialState);
+
+                        return timeoutApplied;
+                    }
+                });
+
+                final Observable<State<R>> commandExecution = executionAttempt
+                        .flatMap(new Func1<State<R>, Observable<State<R>>>() {
                             @Override
-                            public Observable<State> call(State state) {
-                                return null;
+                            public Observable<State<R>> call(State<R> state) {
+                                if (state.getExecutionNotification() != null) {
+                                    switch (state.getExecutionNotification().getKind()) {
+                                        case OnError     : return applyFallback(state);
+                                        case OnNext      : return Observable.just(state);
+                                        case OnCompleted : return Observable.just(state);
+                                        default          : return Observable.error(new IllegalArgumentException("Unknown notification type : " + state.getExecutionNotification().getKind()));
+                                    }
+                                } else {
+                                    if (state.getExecutionThrowable() != null) {
+                                        return applyFallback(state);
+                                    } else {
+                                        return Observable.just(state);
+                                    }
+                                }
+                            }
+                        });
+
+                //TODO Is there a cleaner way to attach the startEvent?
+                final Observable<State<R>> commandExecutionWithStartEvent = commandExecution.scan(initialState,
+                        new Func2<State<R>, State<R>, State<R>>() {
+                            @Override
+                            public State<R> call(State<R> state1, State<R> state2) {
+                                return state2.withStartTimestamp(state1.getStartTimestamp());
                             }
                         })
+                        .doOnNext(new Action1<State<R>>() {
+                            @Override
+                            public void call(State<R> state) {
+                                stateCache.onNext(state);
+                            }
+                        });
+//                        .doOnNext(new Action1<State<R>>() {
+//                            @Override
+//                            public void call(State<R> state) {
+//                                System.out.println("OUTPUT : " + System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " OnNext : " + state);
+//                            }
+//                        })
+//                        .doOnError(new Action1<Throwable>() {
+//                            @Override
+//                            public void call(Throwable ex) {
+//                                System.out.println("OUTPUT : " + System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " OnError : " + ex);
+//                            }
+//                        })
+//                        .doOnCompleted(new Action0() {
+//                            @Override
+//                            public void call() {
+//                                System.out.println("OUTPUT : " + System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " OnCompleted");
+//                            }
+//                        })
+//                        .doOnSubscribe(new Action0() {
+//                            @Override
+//                            public void call() {
+//                                System.out.println("OUTPUT : " + System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " OnSubscribe");
+//                            }
+//                        })
+//                        .doOnUnsubscribe(new Action0() {
+//                            @Override
+//                            public void call() {
+//                                System.out.println("OUTPUT : " + System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " OnUnsubscribe");
+//                            }
+//                        });
 
 
+                final Observable<State<R>> afterCachePut;
 
+                // put in cache
+                if (requestCacheEnabled) {
+                    afterCachePut = putIntoRequestCache(requestCache, cacheKey, commandExecutionWithStartEvent);
 
-//                if (properties.requestLogEnabled().get()) {
-//                    // log this command execution regardless of what happened
-//                    if (currentRequestLog != null) {
-//                        currentRequestLog.addExecutedCommand(_cmd);
-//                    }
-//                }
-//
-//
-//
-//
-//
-//                return hystrixWrapping.concatMapEager(new Func1<State, Observable<R>>() {
-//                    @Override
-//                    public Observable<R> call(State state) {
-//                        return state.getValues();
-//                    }
-//                });
+                } else {
+                    afterCachePut = commandExecutionWithStartEvent;
+                }
+
+                final Observable<State<R>> withCancellationHandling = afterCachePut
+                        .doOnUnsubscribe(new Action0() {
+                            @Override
+                            public void call() {
+                                State<R> stateBeforeCancellation = stateCache.getValue();
+                                if (!stateBeforeCancellation.isExecutionComplete()) {
+                                    stateCache.onNext(stateBeforeCancellation.withCancellation());
+                                }
+                            }
+                        });
+
+                //strip off all the state and just return the values
+                return withCancellationHandling.flatMap(new Func1<State<R>, Observable<R>>() {
+                    @Override
+                    public Observable<R> call(State<R> state) {
+                        return state.getValue();
+                    }
+                });
             }
         });
+    }
 
-        //Observable<R> userExecution = getExecutionObservable();
+    private Observable<R> checkCacheForPreviouslyExecutedCommand(HystrixRequestCache cache, String cacheKey) {
+        HystrixCachedState<R> fromCache = cache.get(cacheKey);
+        if (fromCache != null) {
+            return fromCache.toObservable()
+                    .doOnNext(new Action1<State<R>>() {
+                        @Override
+                        public void call(State<R> state) {
+                            stateCache.onNext(state.withResponseFromCache());
+                        }
+                    })
+                    .flatMap(new Func1<State<R>, Observable<R>>() {
+                        @Override
+                        public Observable<R> call(State<R> state) {
+                            return state.getValue();
+                        }
+                    });
+        } else {
+            return null;
+        }
+    }
+
+    private Observable<State<R>> putIntoRequestCache(HystrixRequestCache cache, String cacheKey, Observable<State<R>> execution) {
+        // wrap it for caching
+        HystrixCachedState<R> toCache = HystrixCachedState.from(execution);
+        HystrixCachedState<R> fromCache = requestCache.putIfAbsent(cacheKey, toCache);
+        if (fromCache != null) {
+            System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " lost the thread race to cache-put");
+            // another thread beat us so we'll use the cached value instead
+            toCache.unsubscribe();
+            return fromCache.toObservable()
+                    .doOnNext(new Action1<State<R>>() {
+                        @Override
+                        public void call(State<R> state) {
+                            stateCache.onNext(state.withResponseFromCache());
+                        }
+                    });
+        } else {
+            System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " won the thread race to cache-put");
+            return toCache.toObservable();
+        }
+    }
+
+    private Observable<State<R>> applyCircuitBreaker(HystrixCircuitBreaker circuitBreaker, final State<R> initialState, final Func0<Observable<State<R>>> execution) {
+        if (circuitBreaker.allowRequest()) {
+            return execution.call();
+        } else {
+            State<R> circuitOpenState = initialState.withShortCircuit();
+            return Observable.just(circuitOpenState);
+        }
+    }
+
+    //TODO Make this static
+    private Observable<State<R>> applyBulkhead(Observable<State<R>> userExecution, final State<R> initialState) {
+        ExecutionIsolationStrategy isolationStrategy = properties.executionIsolationStrategy().get();
+        switch (isolationStrategy) {
+            case THREAD:
+                //System.out.println("Applying thread-isolation!!");
+                final Scheduler hystrixThreadPool = threadPool.getScheduler(new Func0<Boolean>() {
+                    @Override
+                    public Boolean call() {
+                        if (properties.executionIsolationThreadInterruptOnTimeout().get()) {
+                            boolean commandIsTimedOut = false;
+
+                            if (stateCache.hasValue()) {
+                                commandIsTimedOut = stateCache.getValue().getEventCounts().contains(HystrixEventType.TIMEOUT);
+                            }
+                            return commandIsTimedOut;
+                        } else {
+                            return false;
+                        }
+                    }
+                });
+
+                return userExecution
+                        .subscribeOn(hystrixThreadPool)
+                        .onErrorResumeNext(new Func1<Throwable, Observable<? extends State<R>>>() {
+                            @Override
+                            public Observable<? extends State<R>> call(Throwable t) {
+                                if (t instanceof RejectedExecutionException) {
+                                    return Observable.just(initialState.withThreadPoolRejection(t));
+                                } else {
+                                    return Observable.error(t);
+                                }
+                            }
+                        })
+                        .doOnNext(new Action1<State<R>>() {
+                            @Override
+                            public void call(State<R> r) {
+                                //System.out.println("In Thread-pool : " + r);
+                            }
+                        });
+            case SEMAPHORE:
+                //System.out.println("Applying semaphore-isolation!!");
+                final TryableSemaphore semaphore = getExecutionSemaphore();
+                if (semaphore.tryAcquire()) {
+                    System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " Acquired semaphore : " + semaphore);
+                    return userExecution
+                            .doOnUnsubscribe(new Action0() {
+                                @Override
+                                public void call() {
+                                    System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " Releasing semaphore : " + semaphore);
+                                    semaphore.release();
+                                }
+                            });
+                } else {
+                    System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " failed to acquire semaphore : " + semaphore);
+                    return Observable.just(initialState.withSemaphoreRejection());
+                }
+            default:
+                return Observable.error(new RuntimeException("Unknown ExecutionIsolationStrategy : " + isolationStrategy));
+        }
+    }
+
+    private Observable<State<R>> applyTimeout(final Observable<State<R>> execution, State<R> initialState) {
+        if (properties.executionTimeoutEnabled().get()) {
+            return execution.timeout(properties.executionTimeoutInMilliseconds().get(), TimeUnit.MILLISECONDS,
+                    Observable.just(initialState.withTimeout()));
+        } else {
+            return execution;
+        }
+    }
+
+    //TODO Make this static
+    private Observable<State<R>> applyFallback(final State<R> stateWithException) {
+        System.out.println("applyFallback : " + stateWithException + " : " + stateWithException.getExecutionThrowable());
+        if (stateWithException.getEventCounts().contains(HystrixEventType.BAD_REQUEST)) {
+            //no fallback, just return the HystrixBadRequestException
+            return Observable.just(stateWithException);
+        } else {
+            final TryableSemaphore fallbackSemaphore = getFallbackSemaphore();
+            if (fallbackSemaphore.tryAcquire()) {
+                System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " : acquired fallback semaphore : " + fallbackSemaphore);
+                final State<R> fallbackApplied = stateWithException.withExecutionNotification(null);
+                return getFallbackStateObservable(fallbackApplied)
+                        .doOnUnsubscribe(new Action0() {
+                            @Override
+                            public void call() {
+                                System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " : released fallback semaphore : " + fallbackSemaphore);
+                                fallbackSemaphore.release();
+                            }
+                        });
+            } else {
+                System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " : failed to acquire fallback semaphore : " + fallbackSemaphore);
+                return Observable.just(stateWithException.withFallbackRejection());
+            }
+        }
     }
 
     /**
@@ -497,41 +761,41 @@ import java.util.concurrent.atomic.AtomicReference;
                 final boolean requestCacheEnabled = isRequestCachingEnabled();
                 final String cacheKey = getCacheKey();
 
-                /* try from cache first */
-                if (requestCacheEnabled) {
-                    HystrixCommandResponseFromCache<R> fromCache = (HystrixCommandResponseFromCache<R>) requestCache.get(cacheKey);
-                    if (fromCache != null) {
-                        isResponseFromCache = true;
-                        return handleRequestCacheHitAndEmitValues(fromCache, _cmd);
-                    }
-                }
+//                /* try from cache first */
+//                if (requestCacheEnabled) {
+//                    HystrixCommandResponseFromCache<R> fromCache = (HystrixCommandResponseFromCache<R>) requestCache.get(cacheKey);
+//                    if (fromCache != null) {
+//                        isResponseFromCache = true;
+//                        return handleRequestCacheHitAndEmitValues(fromCache, _cmd);
+//                    }
+//                }
 
                 Observable<R> hystrixObservable =
                         Observable.defer(applyHystrixSemantics)
                                 .map(wrapWithAllOnNextHooks);
 
 
-                Observable<R> afterCache;
+//                Observable<R> afterCache;
+//
+//                // put in cache
+//                if (requestCacheEnabled && cacheKey != null) {
+//                    // wrap it for caching
+//                    HystrixCachedObservable<R> toCache = HystrixCachedObservable.from(hystrixObservable, _cmd);
+//                    HystrixCommandResponseFromCache<R> fromCache = (HystrixCommandResponseFromCache<R>) requestCache.putIfAbsent(cacheKey, toCache);
+//                    if (fromCache != null) {
+//                        // another thread beat us so we'll use the cached value instead
+//                        toCache.unsubscribe();
+//                        isResponseFromCache = true;
+//                        return handleRequestCacheHitAndEmitValues(fromCache, _cmd);
+//                    } else {
+//                        // we just created an ObservableCommand so we cast and return it
+//                        afterCache = toCache.toObservable();
+//                    }
+//                } else {
+//                    afterCache = hystrixObservable;
+//                }
 
-                // put in cache
-                if (requestCacheEnabled && cacheKey != null) {
-                    // wrap it for caching
-                    HystrixCachedObservable<R> toCache = HystrixCachedObservable.from(hystrixObservable, _cmd);
-                    HystrixCommandResponseFromCache<R> fromCache = (HystrixCommandResponseFromCache<R>) requestCache.putIfAbsent(cacheKey, toCache);
-                    if (fromCache != null) {
-                        // another thread beat us so we'll use the cached value instead
-                        toCache.unsubscribe();
-                        isResponseFromCache = true;
-                        return handleRequestCacheHitAndEmitValues(fromCache, _cmd);
-                    } else {
-                        // we just created an ObservableCommand so we cast and return it
-                        afterCache = toCache.toObservable();
-                    }
-                } else {
-                    afterCache = hystrixObservable;
-                }
-
-                return afterCache
+                return hystrixObservable
                         .doOnTerminate(terminateCommandCleanup)     // perform cleanup once (either on normal terminal state (this line), or unsubscribe (next line))
                         .doOnUnsubscribe(unsubscribeCommandCleanup) // perform cleanup once
                         .doOnCompleted(fireOnCompletedHook);
@@ -1769,7 +2033,12 @@ import java.util.concurrent.atomic.AtomicReference;
      * @return boolean
      */
     public boolean isExecutionComplete() {
-        return commandState.get() == CommandState.TERMINAL;
+        //return commandState.get() == CommandState.TERMINAL;
+        if (stateCache.hasValue()) {
+            return stateCache.getValue().isExecutionComplete();
+        } else {
+            return false;
+        }
     }
 
     /**
@@ -1782,7 +2051,12 @@ import java.util.concurrent.atomic.AtomicReference;
      * @return boolean
      */
     public boolean isExecutedInThread() {
-        return getCommandResult().isExecutedInThread();
+        //return getCommandResult().isExecutedInThread();
+        if (stateCache.hasValue()) {
+            return stateCache.getValue().isExecutedInThread();
+        } else {
+            return false;
+        }
     }
 
     /**
@@ -1791,7 +2065,12 @@ import java.util.concurrent.atomic.AtomicReference;
      * @return boolean
      */
     public boolean isSuccessfulExecution() {
-        return getCommandResult().getEventCounts().contains(HystrixEventType.SUCCESS);
+        //return getCommandResult().getEventCounts().contains(HystrixEventType.SUCCESS);
+        if (stateCache.hasValue()) {
+            return stateCache.getValue().getEventCounts().contains(HystrixEventType.SUCCESS);
+        } else {
+            return false;
+        }
     }
 
     /**
@@ -1800,7 +2079,12 @@ import java.util.concurrent.atomic.AtomicReference;
      * @return boolean
      */
     public boolean isFailedExecution() {
-        return getCommandResult().getEventCounts().contains(HystrixEventType.FAILURE);
+        //return getCommandResult().getEventCounts().contains(HystrixEventType.FAILURE);
+        if (stateCache.hasValue()) {
+            return stateCache.getValue().getExecutionThrowable() != null;
+        } else {
+            return false;
+        }
     }
 
     /**
@@ -1813,7 +2097,12 @@ import java.util.concurrent.atomic.AtomicReference;
      * @return Throwable or null
      */
     public Throwable getFailedExecutionException() {
-        return executionResult.getException();
+        //return executionResult.getException();
+        if (stateCache.hasValue()) {
+            return stateCache.getValue().getExecutionThrowable();
+        } else {
+            return null;
+        }
     }
 
     /**
@@ -1833,7 +2122,12 @@ import java.util.concurrent.atomic.AtomicReference;
      * @return Throwable or null
      */
     public Throwable getExecutionException() {
-        return executionResult.getExecutionException();
+        //return executionResult.getExecutionException();
+        if (stateCache.hasValue()) {
+            return stateCache.getValue().getExecutionThrowable();
+        } else {
+            return null;
+        }
     }
 
     /**
@@ -1843,7 +2137,12 @@ import java.util.concurrent.atomic.AtomicReference;
      * @return boolean
      */
     public boolean isResponseFromFallback() {
-        return getCommandResult().getEventCounts().contains(HystrixEventType.FALLBACK_SUCCESS);
+        //return getCommandResult().getEventCounts().contains(HystrixEventType.FALLBACK_SUCCESS);
+        if (stateCache.hasValue()) {
+            return stateCache.getValue().getEventCounts().contains(HystrixEventType.FALLBACK_SUCCESS);
+        } else {
+            return false;
+        }
     }
 
     /**
@@ -1853,7 +2152,12 @@ import java.util.concurrent.atomic.AtomicReference;
      * @return boolean
      */
     public boolean isResponseTimedOut() {
-        return getCommandResult().getEventCounts().contains(HystrixEventType.TIMEOUT);
+        //return getCommandResult().getEventCounts().contains(HystrixEventType.TIMEOUT);
+        if (stateCache.hasValue()) {
+            return stateCache.getValue().getEventCounts().contains(HystrixEventType.TIMEOUT);
+        } else {
+            return false;
+        }
     }
 
     /**
@@ -1863,7 +2167,12 @@ import java.util.concurrent.atomic.AtomicReference;
      * @return boolean
      */
     public boolean isResponseShortCircuited() {
-        return getCommandResult().getEventCounts().contains(HystrixEventType.SHORT_CIRCUITED);
+        //return getCommandResult().getEventCounts().contains(HystrixEventType.SHORT_CIRCUITED);
+        if (stateCache.hasValue()) {
+            return stateCache.getValue().getEventCounts().contains(HystrixEventType.SHORT_CIRCUITED);
+        } else {
+            return false;
+        }
     }
 
     /**
@@ -1872,7 +2181,11 @@ import java.util.concurrent.atomic.AtomicReference;
      * @return boolean
      */
     public boolean isResponseFromCache() {
-        return isResponseFromCache;
+        if (stateCache.hasValue()) {
+            return stateCache.getValue().isResponseFromCache();
+        } else {
+            return false;
+        }
     }
 
     /**
@@ -1881,7 +2194,12 @@ import java.util.concurrent.atomic.AtomicReference;
      * @return boolean
      */
     public boolean isResponseSemaphoreRejected() {
-        return getCommandResult().isResponseSemaphoreRejected();
+        //return getCommandResult().isResponseSemaphoreRejected();
+        if (stateCache.hasValue()) {
+            return stateCache.getValue().getEventCounts().contains(HystrixEventType.SEMAPHORE_REJECTED);
+        } else {
+            return false;
+        }
     }
 
     /**
@@ -1890,7 +2208,12 @@ import java.util.concurrent.atomic.AtomicReference;
      * @return boolean
      */
     public boolean isResponseThreadPoolRejected() {
-        return getCommandResult().isResponseThreadPoolRejected();
+        //return getCommandResult().isResponseThreadPoolRejected();
+        if (stateCache.hasValue()) {
+            return stateCache.getValue().getEventCounts().contains(HystrixEventType.THREAD_POOL_REJECTED);
+        } else {
+            return false;
+        }
     }
 
     /**
@@ -1899,7 +2222,12 @@ import java.util.concurrent.atomic.AtomicReference;
      * @return boolean
      */
     public boolean isResponseRejected() {
-        return getCommandResult().isResponseRejected();
+        //return getCommandResult().isResponseRejected();
+        if (stateCache.hasValue()) {
+            return stateCache.getValue().getEventCounts().isRejected();
+        } else {
+            return false;
+        }
     }
 
     /**
@@ -1910,7 +2238,12 @@ import java.util.concurrent.atomic.AtomicReference;
      * @return {@code List<HystrixEventType>}
      */
     public List<HystrixEventType> getExecutionEvents() {
-        return getCommandResult().getOrderedList();
+        //return getCommandResult().getOrderedList();
+        if (stateCache.hasValue()) {
+            return stateCache.getValue().getOrderedEventList();
+        } else {
+            return new ArrayList<HystrixEventType>();
+        }
     }
 
     private ExecutionResult getCommandResult() {
@@ -1962,7 +2295,12 @@ import java.util.concurrent.atomic.AtomicReference;
      * @return int
      */
     public int getExecutionTimeInMilliseconds() {
-        return getCommandResult().getExecutionLatency();
+        //return getCommandResult().getExecutionLatency();
+        if (stateCache.hasValue()) {
+            return (int) stateCache.getValue().getExecutionLatency();
+        } else {
+            return -1;
+        }
     }
 
     /**

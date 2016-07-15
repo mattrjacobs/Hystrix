@@ -21,8 +21,6 @@ import com.netflix.hystrix.strategy.concurrency.HystrixRequestVariableHolder;
 import com.netflix.hystrix.strategy.concurrency.HystrixRequestVariableLifecycle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import rx.Observable;
-import rx.internal.operators.CachedObservable;
 
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -46,15 +44,16 @@ public class HystrixRequestCache {
      * <p>
      * Key => CommandPrefix + CacheKey : Future<?> from queue()
      */
-    private static final HystrixRequestVariableHolder<ConcurrentHashMap<ValueCacheKey, HystrixCachedObservable<?>>> requestVariableForCache = new HystrixRequestVariableHolder<ConcurrentHashMap<ValueCacheKey, HystrixCachedObservable<?>>>(new HystrixRequestVariableLifecycle<ConcurrentHashMap<ValueCacheKey, HystrixCachedObservable<?>>>() {
+    private static final HystrixRequestVariableHolder<ConcurrentHashMap<ValueCacheKey, HystrixCachedState<?>>> requestVariableForCache =
+            new HystrixRequestVariableHolder<ConcurrentHashMap<ValueCacheKey, HystrixCachedState<?>>>(new HystrixRequestVariableLifecycle<ConcurrentHashMap<ValueCacheKey, HystrixCachedState<?>>>() {
 
         @Override
-        public ConcurrentHashMap<ValueCacheKey, HystrixCachedObservable<?>> initialValue() {
-            return new ConcurrentHashMap<ValueCacheKey, HystrixCachedObservable<?>>();
+        public ConcurrentHashMap<ValueCacheKey, HystrixCachedState<?>> initialValue() {
+            return new ConcurrentHashMap<ValueCacheKey, HystrixCachedState<?>>();
         }
 
         @Override
-        public void shutdown(ConcurrentHashMap<ValueCacheKey, HystrixCachedObservable<?>> value) {
+        public void shutdown(ConcurrentHashMap<ValueCacheKey, HystrixCachedState<?>> value) {
             // nothing to shutdown
         }
 
@@ -89,22 +88,16 @@ public class HystrixRequestCache {
         return c;
     }
 
-    /**
-     * Retrieve a cached Future for this request scope if a matching command has already been executed/queued.
-     * 
-     * @return {@code Future<T>}
-     */
-    // suppressing warnings because we are using a raw Future since it's in a heterogeneous ConcurrentHashMap cache
     @SuppressWarnings({ "unchecked" })
-    /* package */<T> HystrixCachedObservable<T> get(String cacheKey) {
+    /* package */<T> HystrixCachedState<T> get(String cacheKey) {
         ValueCacheKey key = getRequestCacheKey(cacheKey);
         if (key != null) {
-            ConcurrentHashMap<ValueCacheKey, HystrixCachedObservable<?>> cacheInstance = requestVariableForCache.get(concurrencyStrategy);
+            ConcurrentHashMap<ValueCacheKey, HystrixCachedState<?>> cacheInstance = requestVariableForCache.get(concurrencyStrategy);
             if (cacheInstance == null) {
                 throw new IllegalStateException("Request caching is not available. Maybe you need to initialize the HystrixRequestContext?");
             }
             /* look for the stored value */
-            return (HystrixCachedObservable<T>) cacheInstance.get(key);
+            return (HystrixCachedState<T>) cacheInstance.get(key);
         }
         return null;
     }
@@ -116,22 +109,22 @@ public class HystrixRequestCache {
      * 
      * @param cacheKey
      *            key as defined by {@link HystrixCommand#getCacheKey()}
-     * @param f
-     *            Future to be cached
+     * @param state
+     *            State to be cached
      * 
      * @return null if nothing else was in the cache (or this {@link HystrixCommand} does not have a cacheKey) or previous value if another thread beat us to adding to the cache
      */
     // suppressing warnings because we are using a raw Future since it's in a heterogeneous ConcurrentHashMap cache
     @SuppressWarnings({ "unchecked" })
-    /* package */<T> HystrixCachedObservable<T> putIfAbsent(String cacheKey, HystrixCachedObservable<T> f) {
+    /* package */<T> HystrixCachedState<T> putIfAbsent(String cacheKey, HystrixCachedState<T> state) {
         ValueCacheKey key = getRequestCacheKey(cacheKey);
         if (key != null) {
             /* look for the stored value */
-            ConcurrentHashMap<ValueCacheKey, HystrixCachedObservable<?>> cacheInstance = requestVariableForCache.get(concurrencyStrategy);
+            ConcurrentHashMap<ValueCacheKey, HystrixCachedState<?>> cacheInstance = requestVariableForCache.get(concurrencyStrategy);
             if (cacheInstance == null) {
                 throw new IllegalStateException("Request caching is not available.  Maybe you need to initialize the HystrixRequestContext?");
             }
-            HystrixCachedObservable<T> alreadySet = (HystrixCachedObservable<T>) cacheInstance.putIfAbsent(key, f);
+            HystrixCachedState<T> alreadySet = (HystrixCachedState<T>) cacheInstance.putIfAbsent(key, state);
             if (alreadySet != null) {
                 // someone beat us so we didn't cache this
                 return alreadySet;

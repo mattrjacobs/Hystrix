@@ -15,6 +15,7 @@
  */
 package com.netflix.hystrix;
 
+import com.netflix.hystrix.state.State;
 import rx.Observable;
 
 import com.netflix.hystrix.HystrixCommandProperties.ExecutionIsolationStrategy;
@@ -232,5 +233,20 @@ public abstract class HystrixObservableCommand<R> extends AbstractCommand<R> imp
     @Override
     final protected Observable<R> getFallbackObservable() {
         return resumeWithFallback();
+    }
+
+    @Override
+    protected CommandDataStyle getCommandDataStyle() {
+        return CommandDataStyle.MULTIVALUED;
+    }
+
+    @Override
+    protected Observable<State<R>> getExecutionStateObservable() {
+        return null;
+    }
+
+    @Override
+    protected Observable<State<R>> getFallbackStateObservable(State<R> executionState) {
+        return null;
     }
 }
