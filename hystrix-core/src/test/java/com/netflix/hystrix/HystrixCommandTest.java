@@ -3863,7 +3863,7 @@ public class HystrixCommandTest extends CommonHystrixCommandTests<TestHystrixCom
                         assertEquals(HystrixRuntimeException.class, hook.getCommandException().getClass());
                         assertEquals(RuntimeException.class, hook.getExecutionException().getClass());
                         assertEquals(RuntimeException.class, hook.getFallbackException().getClass());
-                        assertEquals("onStart - onThreadStart - !onRunStart - onExecutionStart - onExecutionError - !onRunError - onThreadComplete - onFallbackStart - onFallbackError - onError - ", hook.executionSequence.toString());
+                        assertEquals("onStart - onThreadStart - !onRunStart - onExecutionStart - onExecutionError - !onRunError - onFallbackStart - onFallbackError - onError - onThreadComplete - ", hook.executionSequence.toString());
                     }
                 });
     }

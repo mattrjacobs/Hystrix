@@ -30,23 +30,23 @@ public class State<R> {
 
     private final EventCounts eventCounts;
 
-    private final Execution<R> execution;
-    private final Execution<R> fallbackExecution;
+    private final Run<R> run;
+    private final Run<R> fallbackRun;
     private final Throwable commandThrowable;
 
     private final boolean fromCache;
 
     private State(CommandDataStyle commandDataStyle, Class<HystrixInvokable> commandClass, HystrixCommandKey commandKey,
                   long startTimestamp, long latestTimestamp, EventCounts eventCounts,
-                  Execution<R> execution, Execution<R> fallbackExecution, Throwable commandThrowable, boolean fromCache) {
+                  Run<R> run, Run<R> fallbackRun, Throwable commandThrowable, boolean fromCache) {
         this.commandDataStyle = commandDataStyle;
         this.commandClass = commandClass;
         this.commandKey = commandKey;
         this.startTimestamp = startTimestamp;
         this.latestTimestamp = latestTimestamp;
         this.eventCounts = eventCounts;
-        this.execution = execution;
-        this.fallbackExecution = fallbackExecution;
+        this.run = run;
+        this.fallbackRun = fallbackRun;
         this.commandThrowable = commandThrowable;
         this.fromCache = fromCache;
     }
@@ -54,26 +54,28 @@ public class State<R> {
     public static <R> State<R> create(CommandDataStyle commandDataStyle, Class<HystrixInvokable> commandClass, HystrixCommandKey commandKey) {
         final long startTimestamp = System.currentTimeMillis();
 
-        return new State<R>(commandDataStyle, commandClass, commandKey, startTimestamp, startTimestamp, EventCounts.create(), Execution.<R>empty(), Execution.<R>empty(), null, false);
+        return new State<R>(commandDataStyle, commandClass, commandKey, startTimestamp, startTimestamp, EventCounts.create(), Run.<R>empty(), Run.<R>empty(), null, false);
     }
 
     public Observable<R> getValue() {
+        //this is the only user-facing throwable that should make it out of the command
+        //the run and fallbackRun may contains Throwables but those shouldn't go to users
         if (commandThrowable != null) {
             return Observable.error(commandThrowable);
         }
-        if (fallbackExecution.notification != null) {
-            Notification<R> n = fallbackExecution.notification;
+        if (fallbackRun.executionNotification != null) {
+            Notification<R> n = fallbackRun.executionNotification;
             switch (n.getKind()) {
                 case OnNext      : return Observable.just(n.getValue());
-                case OnError     : return Observable.error(n.getThrowable());
+                case OnError     : return Observable.empty(); //only send out the commandException
                 case OnCompleted : return Observable.empty();
                 default          : return Observable.error(new IllegalStateException("Unexpected Execution Notification Type : " + n.getKind()));
             }
-        } else if (execution.notification != null) {
-            Notification<R> n = execution.notification;
+        } else if (run.executionNotification != null) {
+            Notification<R> n = run.executionNotification;
             switch (n.getKind()) {
                 case OnNext      : return Observable.just(n.getValue());
-                case OnError     : return Observable.error(n.getThrowable());
+                case OnError     : return Observable.empty(); //only send out the commandException
                 case OnCompleted : return Observable.empty();
                 default          : return Observable.error(new IllegalStateException("Unexpected Fallback Execution Notification Type : " + n.getKind()));
             }
@@ -83,11 +85,11 @@ public class State<R> {
     }
 
     public Notification<R> getExecutionNotification() {
-        return execution.notification;
+        return run.executionNotification;
     }
 
     public Throwable getExecutionThrowable() {
-        return execution.throwable;
+        return run.getThrowable();
     }
 
     //TODO Model fallback latency separately?
@@ -96,7 +98,11 @@ public class State<R> {
     }
 
     public Notification<R> getFallbackNotification() {
-        return fallbackExecution.notification;
+        return fallbackRun.executionNotification;
+    }
+
+    public Throwable getFallbackThrowable() {
+        return fallbackRun.getThrowable();
     }
 
     public EventCounts getEventCounts() {
@@ -108,7 +114,7 @@ public class State<R> {
     }
 
     public boolean isExecutedInThread() {
-        return execution.thread != null;
+        return run.thread != null;
     }
 
     public boolean isResponseFromCache() {
@@ -134,14 +140,14 @@ public class State<R> {
     }
 
     public boolean isExecutionComplete() {
-        if (fallbackExecution.notification != null) {
-            switch (fallbackExecution.notification.getKind()) {
+        if (fallbackRun.executionNotification != null) {
+            switch (fallbackRun.executionNotification.getKind()) {
                 case OnCompleted : return true;
                 case OnError     : return true;
                 default          : return false;
             }
-        } else if (execution.notification != null) {
-            switch (execution.notification.getKind()) {
+        } else if (run.executionNotification != null) {
+            switch (run.executionNotification.getKind()) {
                 case OnCompleted : return true;
                 case OnError     : return true;
                 default          : return false;
@@ -156,7 +162,7 @@ public class State<R> {
     }
 
     public Thread getExecutionThread() {
-        return execution.thread;
+        return run.thread;
     }
 
     public HystrixRuntimeException.FailureType getFailureType() {
@@ -165,17 +171,17 @@ public class State<R> {
 
     public State<R> withExecutionOnThread(Thread executionThread) {
         return new State<R>(commandDataStyle, commandClass, commandKey, startTimestamp, System.currentTimeMillis(), eventCounts,
-                execution.onThread(executionThread), fallbackExecution, commandThrowable, fromCache);
+                run.onThread(executionThread), fallbackRun, commandThrowable, fromCache);
     }
 
     public State<R> withFallbackExecutionOnThread(Thread executionThread) {
         return new State<R>(commandDataStyle, commandClass, commandKey, startTimestamp, System.currentTimeMillis(), eventCounts,
-                execution, fallbackExecution.onThread(executionThread), commandThrowable, fromCache);
+                run, fallbackRun.onThread(executionThread), commandThrowable, fromCache);
     }
 
     public State<R> withCommandThrowable(Throwable throwable) {
         return new State<R>(commandDataStyle, commandClass, commandKey, startTimestamp, System.currentTimeMillis(), eventCounts,
-                execution, fallbackExecution, throwable, fromCache);
+                run, fallbackRun, throwable, fromCache);
     }
 
     public State<R> withExecutionNotification(Notification<R> notification) {
@@ -188,11 +194,11 @@ public class State<R> {
                         case SCALAR:
                             return new State<R>(commandDataStyle, commandClass, commandKey, startTimestamp, newTimestamp,
                                     eventCounts.plus(HystrixEventType.SUCCESS),
-                                    execution.withNotification(notification), fallbackExecution, commandThrowable, fromCache);
+                                    run.withExecutionNotification(notification), fallbackRun, commandThrowable, fromCache);
                         case MULTIVALUED:
                             return new State<R>(commandDataStyle, commandClass, commandKey, startTimestamp, newTimestamp,
                                     eventCounts.plus(HystrixEventType.EMIT),
-                                    execution.withNotification(notification), fallbackExecution, commandThrowable, fromCache);
+                                    run.withExecutionNotification(notification), fallbackRun, commandThrowable, fromCache);
                         default:
                             throw new IllegalStateException("Unexpected command data style : " + commandDataStyle);
                     }
@@ -201,17 +207,17 @@ public class State<R> {
                     HystrixEventType eventType = getEventType(notification.getThrowable());
                     return new State<R>(commandDataStyle, commandClass, commandKey, startTimestamp, newTimestamp,
                             eventCounts.plus(eventType),
-                            execution.withNotification(notification).withThrowable(notification.getThrowable()), fallbackExecution, commandThrowable, fromCache);
+                            run.withExecutionNotification(notification), fallbackRun, commandThrowable, fromCache);
                 case OnCompleted:
                     System.out.println("OnCompleted");
                     switch (commandDataStyle) {
                         case SCALAR:
                             return new State<R>(commandDataStyle, commandClass, commandKey, startTimestamp, newTimestamp,
-                                    eventCounts, execution.withNotification(notification), fallbackExecution, commandThrowable, fromCache); //already sent the SUCCESS
+                                    eventCounts, run.withExecutionNotification(notification), fallbackRun, commandThrowable, fromCache); //already sent the SUCCESS
                         case MULTIVALUED:
                             return new State<R>(commandDataStyle, commandClass, commandKey, startTimestamp, newTimestamp,
                                     eventCounts.plus(HystrixEventType.SUCCESS),
-                                    execution.withNotification(notification), fallbackExecution, commandThrowable, fromCache);
+                                    run.withExecutionNotification(notification), fallbackRun, commandThrowable, fromCache);
                         default:
                             throw new IllegalStateException("Unexpected command data style : " + commandDataStyle);
                     }
@@ -220,7 +226,7 @@ public class State<R> {
             }
         } else {
             return new State<R>(commandDataStyle, commandClass, commandKey, startTimestamp, newTimestamp, eventCounts,
-                    execution.withNotification(null), fallbackExecution, commandThrowable, fromCache);
+                    run.withExecutionNotification(null), fallbackRun, commandThrowable, fromCache);
         }
     }
 
@@ -232,10 +238,10 @@ public class State<R> {
                 switch (commandDataStyle) {
                     case SCALAR      : return new State<R>(commandDataStyle, commandClass, commandKey, startTimestamp, newTimestamp,
                             eventCounts.plus(HystrixEventType.FALLBACK_SUCCESS),
-                            execution, fallbackExecution.withNotification(notification), commandThrowable, fromCache);
+                            run, fallbackRun.withExecutionNotification(notification), commandThrowable, fromCache);
                     case MULTIVALUED : return new State<R>(commandDataStyle, commandClass, commandKey, startTimestamp, newTimestamp,
                             eventCounts.plus(HystrixEventType.FALLBACK_EMIT),
-                            execution, fallbackExecution.withNotification(notification), commandThrowable, fromCache);
+                            run, fallbackRun.withExecutionNotification(notification), commandThrowable, fromCache);
                     default          : throw new IllegalStateException("Unexpected command data style : " + commandDataStyle);
                 }
             case OnError:
@@ -246,15 +252,15 @@ public class State<R> {
                         commandClass, commandKey);
                 return new State<R>(commandDataStyle, commandClass, commandKey, startTimestamp, newTimestamp,
                         eventCounts.plus(fallbackEventType),
-                        execution, fallbackExecution.withNotification(notification), userFacingThrowable, fromCache);
+                        run, fallbackRun.withExecutionNotification(notification), userFacingThrowable, fromCache);
             case OnCompleted:
                 System.out.println("OnCompleted(Fallback)");
                 switch (commandDataStyle) {
                     case SCALAR      : return new State<R>(commandDataStyle, commandClass, commandKey, startTimestamp, newTimestamp,
-                            eventCounts, execution, fallbackExecution.withNotification(notification), commandThrowable, fromCache); //already sent the FALLBACK_SUCCESS
+                            eventCounts, run, fallbackRun.withExecutionNotification(notification), commandThrowable, fromCache); //already sent the FALLBACK_SUCCESS
                     case MULTIVALUED : return new State<R>(commandDataStyle, commandClass, commandKey, startTimestamp, newTimestamp,
                             eventCounts.plus(HystrixEventType.FALLBACK_SUCCESS),
-                            execution, fallbackExecution.withNotification(notification), commandThrowable, fromCache);
+                            run, fallbackRun.withExecutionNotification(notification), commandThrowable, fromCache);
                     default          : throw new IllegalStateException("Unexpected command data style : " + commandDataStyle);
                 }
             default:
@@ -266,27 +272,27 @@ public class State<R> {
         Throwable shortCircuitException = new RuntimeException("Hystrix circuit short-circuited and is OPEN");
         return new State<R>(commandDataStyle, commandClass, commandKey, startTimestamp, System.currentTimeMillis(),
                 eventCounts.plus(HystrixEventType.SHORT_CIRCUITED),
-                execution.withThrowable(shortCircuitException), fallbackExecution, commandThrowable, fromCache);
+                run.withUnexecutedThrowable(shortCircuitException), fallbackRun, commandThrowable, fromCache);
     }
 
     public State<R> withThreadPoolRejection(Throwable threadPoolRejectionException) {
         return new State<R>(commandDataStyle, commandClass, commandKey, startTimestamp, System.currentTimeMillis(),
                 eventCounts.plus(HystrixEventType.THREAD_POOL_REJECTED),
-                execution.withThrowable(threadPoolRejectionException), fallbackExecution, commandThrowable, fromCache);
+                run.withUnexecutedThrowable(threadPoolRejectionException), fallbackRun, commandThrowable, fromCache);
     }
 
     public State<R> withSemaphoreRejection() {
         Throwable semaphoreRejectedException = new RuntimeException("could not acquire a semaphore for execution");
         return new State<R>(commandDataStyle, commandClass, commandKey, startTimestamp, System.currentTimeMillis(),
                 eventCounts.plus(HystrixEventType.SEMAPHORE_REJECTED),
-                execution.withThrowable(semaphoreRejectedException), fallbackExecution, commandThrowable, fromCache);
+                run.withUnexecutedThrowable(semaphoreRejectedException), fallbackRun, commandThrowable, fromCache);
     }
 
     public State<R> withTimeout() {
         Throwable timeoutException = new TimeoutException();
         return new State<R>(commandDataStyle, commandClass, commandKey, startTimestamp, System.currentTimeMillis(),
                 eventCounts.plus(HystrixEventType.TIMEOUT),
-                execution.withThrowable(timeoutException), fallbackExecution, commandThrowable, fromCache);
+                run.withUnexecutedThrowable(timeoutException), fallbackRun, commandThrowable, fromCache);
     }
 
     public State<R> withFallbackRejection() {
@@ -295,19 +301,19 @@ public class State<R> {
                 getExecutionThrowable(), null);
         return new State<R>(commandDataStyle, commandClass, commandKey, startTimestamp, System.currentTimeMillis(),
                 eventCounts.plus(HystrixEventType.FALLBACK_REJECTION),
-                execution, fallbackExecution.withThrowable(fallbackSemaphoreRejectedException), commandThrowable, fromCache);
+                run, fallbackRun.withUnexecutedThrowable(fallbackSemaphoreRejectedException), commandThrowable, fromCache);
     }
 
     public State<R> withResponseFromCache() {
         return new State<R>(commandDataStyle, commandClass, commandKey, System.currentTimeMillis(), System.currentTimeMillis(),
                 eventCounts.plus(HystrixEventType.RESPONSE_FROM_CACHE),
-                execution, fallbackExecution, commandThrowable, true);
+                run, fallbackRun, commandThrowable, true);
     }
 
     public State<R> withCancellation() {
         return new State<R>(commandDataStyle, commandClass, commandKey, startTimestamp, System.currentTimeMillis(),
                 eventCounts.plus(HystrixEventType.CANCELLED),
-                execution, fallbackExecution, commandThrowable, fromCache);
+                run, fallbackRun, commandThrowable, fromCache);
     }
 
     private static Throwable getUserFacingThrowable(Throwable executionException, Throwable fallbackException,
@@ -370,37 +376,57 @@ public class State<R> {
 
     @Override
     public String toString() {
-        return ((execution.notification == null) ? "<NO EN>" : execution.notification.toString()) +
-                ((fallbackExecution.notification == null) ? "<NO FN>" : fallbackExecution.notification.toString()) +
+        return ((run.executionNotification == null) ? "<NO EN>" : run.executionNotification.toString()) +
+                ((fallbackRun.executionNotification == null) ? "<NO FN>" : fallbackRun.executionNotification.toString()) +
                 " @ " + startTimestamp + " - " + latestTimestamp +
-                " : " + ((execution.thread == null) ? "<NO THREAD>" : execution.thread.getName());
+                " : " + ((run.thread == null) ? "<NO THREAD>" : run.thread.getName());
     }
 
-    private static class Execution<R> {
-        final Thread thread;
-        final Notification<R> notification;
-        final Throwable throwable;
+    /**
+     * Represents the execution of some user code.
+     *
+     * The notification is the actual data coming from the execution
+     * The thread is the thread on which the execution took place
+     * The throwable is set whenever
+     * @param <R>
+     */
+    private static class Run<R> {
+        private final Thread thread;
+        private final Notification<R> executionNotification;
+        private final Throwable unexecutedThrowable;
 
-        private Execution(final Thread thread, final Notification<R> notification, final Throwable throwable) {
+        private Run(final Thread thread, final Notification<R> executionNotification, final Throwable unexecutedThrowable) {
             this.thread = thread;
-            this.notification = notification;
-            this.throwable = throwable;
+            this.executionNotification = executionNotification;
+            this.unexecutedThrowable = unexecutedThrowable;
         }
 
-        static <R> Execution<R> empty() {
-            return new Execution<R>(null, null, null);
+        static <R> Run<R> empty() {
+            return new Run<R>(null, null, null);
         }
 
-        Execution<R> onThread(Thread thread) {
-            return new Execution<R>(thread, notification, throwable);
+        Run<R> onThread(Thread thread) {
+            return new Run<R>(thread, executionNotification, unexecutedThrowable);
         }
 
-        Execution<R> withNotification(Notification<R> notification) {
-            return new Execution<R>(thread, notification, throwable);
+        Run<R> withExecutionNotification(Notification<R> executionNotification) {
+            return new Run<R>(thread, executionNotification, unexecutedThrowable);
         }
 
-        Execution<R> withThrowable(Throwable throwable) {
-            return new Execution<R>(thread, notification, throwable);
+        Run<R> withUnexecutedThrowable(Throwable unexecutedThrowable) {
+            return new Run<R>(thread, executionNotification, unexecutedThrowable);
+        }
+
+        Throwable getThrowable() {
+            if (unexecutedThrowable != null) {
+                return unexecutedThrowable;
+            } else {
+                if (executionNotification != null) {
+                    return executionNotification.getThrowable();
+                } else {
+                    return null;
+                }
+            }
         }
     }
 }
