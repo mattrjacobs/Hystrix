@@ -20,6 +20,7 @@ import com.netflix.hystrix.AbstractTestHystrixCommand.CacheEnabled;
 import com.netflix.hystrix.AbstractTestHystrixCommand.ExecutionResult;
 import com.netflix.hystrix.AbstractTestHystrixCommand.FallbackResult;
 import com.netflix.hystrix.exception.HystrixBadRequestException;
+import com.netflix.hystrix.exception.HystrixRuntimeException;
 import com.netflix.hystrix.strategy.HystrixPlugins;
 import com.netflix.hystrix.strategy.concurrency.HystrixContextScheduler;
 import com.netflix.hystrix.strategy.properties.HystrixProperty;
@@ -398,7 +399,7 @@ public abstract class CommonHystrixCommandTests<C extends AbstractTestHystrixCom
                         assertTrue(hook.commandEmissionsMatch(0, 1, 0));
                         assertTrue(hook.executionEventsMatch(0, 1, 0));
                         assertTrue(hook.fallbackEventsMatch(0, 0, 0));
-                        assertEquals(RuntimeException.class, hook.getCommandException().getClass());
+                        assertEquals(HystrixRuntimeException.class, hook.getCommandException().getClass());
                         assertEquals(RuntimeException.class, hook.getExecutionException().getClass());
                         assertNull(hook.getFallbackException());
                         assertEquals("onStart - !onRunStart - onExecutionStart - onExecutionError - !onRunError - onError - ", hook.executionSequence.toString());

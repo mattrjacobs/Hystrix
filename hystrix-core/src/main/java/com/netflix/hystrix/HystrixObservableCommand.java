@@ -241,7 +241,7 @@ public abstract class HystrixObservableCommand<R> extends AbstractCommand<R> imp
     }
 
     @Override
-    protected Observable<State<R>> getExecutionStateObservable() {
+    protected Observable<State<R>> getExecutionStateObservable(State<R> commandStart) {
         return null;
     }
 
