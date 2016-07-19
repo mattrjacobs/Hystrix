@@ -16,12 +16,16 @@
 package com.netflix.hystrix;
 
 import com.netflix.hystrix.state.State;
+import rx.Notification;
 import rx.Observable;
 
 import com.netflix.hystrix.HystrixCommandProperties.ExecutionIsolationStrategy;
 import com.netflix.hystrix.strategy.executionhook.HystrixCommandExecutionHook;
 import com.netflix.hystrix.strategy.properties.HystrixPropertiesStrategy;
 import com.netflix.hystrix.strategy.eventnotifier.HystrixEventNotifier;
+import rx.functions.Func0;
+import rx.functions.Func1;
+import rx.functions.Func2;
 
 /**
  * Used to wrap code that will execute potentially risky functionality (typically meaning a service call over the network)
@@ -241,12 +245,153 @@ public abstract class HystrixObservableCommand<R> extends AbstractCommand<R> imp
     }
 
     @Override
-    protected Observable<State<R>> getExecutionStateObservable(State<R> commandStart, ExecutionIsolationStrategy isolationStrategy) {
-        return null;
+    protected Observable<State<R>> getExecutionStateObservable(final State<R> commandStart, final ExecutionIsolationStrategy isolationStrategy) {
+        final AbstractCommand<R> _cmd = this;
+
+        return Observable.defer(new Func0<Observable<State<R>>>() {
+            @Override
+            public Observable<State<R>> call() {
+                final State<R> executionStart;
+                switch (isolationStrategy) {
+                    case SEMAPHORE : executionStart = commandStart.startSemaphoreExecution();
+                        break;
+                    case THREAD    : executionStart = commandStart.startExecutionOnThread(Thread.currentThread());
+                        break;
+                    default        : throw new IllegalStateException("Unexpected isolationStrategy : " + isolationStrategy);
+                }
+
+                Throwable hookStartError = executeExecutionStartHooks(isolationStrategy);
+                if (hookStartError != null) {
+                    Observable<State<R>> hookError = Observable.just(executionStart.withExecutionNotification(Notification.<R>createOnError(hookStartError)));
+                    return hookError.startWith(commandStart, executionStart);
+                }
+
+                Observable<State<R>> actualExecution;
+                try {
+                    actualExecution = construct()
+                            .map(new Func1<R, R>() {
+                                @Override
+                                public R call(R userValue) {
+                                    return wrapValueWithExecutionHooks(userValue, _cmd);
+                                }
+                            })
+                            .onErrorResumeNext(new Func1<Throwable, Observable<? extends R>>() {
+                                @Override
+                                public Observable<? extends R> call(Throwable throwable) {
+                                    return Observable.error(wrapFailureWithExecutionFailureHooks(throwable, _cmd));
+                                }
+                            })
+                            .materialize()
+                            .scan(executionStart, new Func2<State<R>, Notification<R>, State<R>>() {
+                                @Override
+                                public State<R> call(State<R> lastState, Notification<R> constructNotification) {
+                                    switch (constructNotification.getKind()) {
+                                        case OnNext:  return lastState.withExecutionNotification(constructNotification);
+                                        case OnError: return lastState.withExecutionNotification(constructNotification);
+                                        case OnCompleted:
+                                            Throwable hookSuccessError = executeExecutionSuccessHooks(_cmd);
+                                            if (hookSuccessError != null) {
+                                                return lastState.withExecutionNotification(Notification.<R>createOnError(hookSuccessError));
+                                            } else {
+                                                return lastState.withExecutionNotification(Notification.<R>createOnCompleted());
+                                            }
+                                        default:
+                                            throw new IllegalArgumentException("Unknown Notification kind : " + constructNotification.getKind());
+
+                                    }
+                                }
+                            });
+
+                } catch (Throwable syncConstructEx) {
+                    //in case construct() throws synchronous error
+                    Throwable hookEx = wrapFailureWithExecutionFailureHooks(syncConstructEx, _cmd);
+                    actualExecution = Observable.just(executionStart, executionStart.withExecutionNotification(Notification.<R>createOnError(hookEx)));
+                }
+
+                return actualExecution.startWith(commandStart);
+            }
+        });
     }
 
     @Override
-    protected Observable<State<R>> getFallbackStateObservable(State<R> executionState) {
-        return null;
+    protected Observable<State<R>> getFallbackStateObservable(final State<R> executionState) {
+        final AbstractCommand<R> _cmd = this;
+        final boolean shouldApplyFallbackHooks = isFallbackUserSupplied(this);
+        final State<R> initialFallbackState = executionState.startFallbackExecution(Thread.currentThread());
+
+        return Observable.defer(new Func0<Observable<State<R>>>() {
+            @Override
+            public Observable<State<R>> call() {
+                if (shouldApplyFallbackHooks) {
+                    Throwable hookError = executeFallbackStartHooks(_cmd);
+                    if (hookError != null) {
+                        return Observable.just(initialFallbackState.withExecutionNotification(Notification.<R>createOnError(hookError)));
+                    }
+                }
+
+                try {
+                    Observable<R> fallbackValue;
+                    if (shouldApplyFallbackHooks) {
+                        Observable<R> userFallbackValue = resumeWithFallback();
+                        Observable<R> hookFallbackValue = userFallbackValue.map(new Func1<R, R>() {
+                            @Override
+                            public R call(R r) {
+                                return wrapValueWithFallbackHooks(r, _cmd);
+                            }
+                        });
+                        fallbackValue = hookFallbackValue;
+                    } else {
+                        Observable<R> userFallbackValue = resumeWithFallback();
+                        fallbackValue = userFallbackValue;
+                    }
+
+                    return fallbackValue
+                            .onErrorResumeNext(new Func1<Throwable, Observable<? extends R>>() {
+                                @Override
+                                public Observable<? extends R> call(Throwable throwable) {
+                                    Throwable fallbackException;
+                                    if (shouldApplyFallbackHooks) {
+                                        Throwable wrappedEx = wrapFallbackFailureWithFallbackFailureHooks(throwable, _cmd);
+                                        fallbackException = wrappedEx;
+                                    } else {
+                                        fallbackException = throwable;
+                                    }
+                                    return Observable.error(fallbackException);
+                                }
+                            })
+                            .materialize()
+                            .scan(initialFallbackState, new Func2<State<R>, Notification<R>, State<R>>() {
+                                @Override
+                                public State<R> call(State<R> lastState, Notification<R> fallbackNotification) {
+                                    switch (fallbackNotification.getKind()) {
+                                        case OnNext:
+                                            return lastState.withFallbackExecutionNotification(fallbackNotification);
+                                        case OnError:
+                                            return lastState.withFallbackExecutionNotification(fallbackNotification);
+                                        case OnCompleted:
+                                            Throwable hookSuccessError = executeFallbackSuccessHooks(_cmd);
+                                            if (hookSuccessError != null) {
+                                                return lastState.withFallbackExecutionNotification(Notification.<R>createOnError(hookSuccessError));
+                                            } else {
+                                                return lastState.withFallbackExecutionNotification(Notification.<R>createOnCompleted());
+                                            }
+                                        default:
+                                            throw new IllegalArgumentException("Unknown Notification kind : " + fallbackNotification.getKind());
+
+                                    }
+                                }
+                            });
+                } catch (Throwable syncFallbackEx) {
+                    System.out.println("!!! Caught syncfallback ex : " + syncFallbackEx);
+                    Throwable hookEx;
+                    if (shouldApplyFallbackHooks) {
+                        hookEx = wrapFallbackFailureWithFallbackFailureHooks(syncFallbackEx, _cmd);
+                    } else {
+                        hookEx = syncFallbackEx;
+                    }
+                    return Observable.just(initialFallbackState.withFallbackExecutionNotification(Notification.<R>createOnError(hookEx)));
+                }
+            }
+        });
     }
 }

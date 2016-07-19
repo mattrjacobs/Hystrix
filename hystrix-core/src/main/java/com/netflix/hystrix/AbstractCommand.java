@@ -448,26 +448,13 @@ import java.util.concurrent.atomic.AtomicReference;
                     afterCachePut = commandExecution;
                 }
 
-                final Observable<State<R>> withCancellationHandling = afterCachePut
-                        //TODO share with cache case?
-                        .doOnUnsubscribe(new Action0() {
-                            @Override
-                            public void call() {
-                                State<R> stateBeforeCancellation = stateCache.getValue();
-                                if (!stateBeforeCancellation.isExecutionComplete()) {
-                                    stateCache.onNext(stateBeforeCancellation.withCancellation());
-                                }
-                            }
-                        });
-
                 //strip off all the state and just return the values
-                Observable<R> commandValues = withCancellationHandling
+                Observable<R> commandValues = afterCachePut
                         .doOnNext(new Action1<State<R>>() {
                             @Override
                             public void call(State<R> state) {
-                                System.out.println("$$$$ " + System.currentTimeMillis() + " STATE #" + _cmd.hashCode() + "# : " + state + " : " + state.timing);
-                                if (state.getCommandLifecycle() == State.CommandLifecycle.ThreadExecutionStart ||
-                                        state.getCommandLifecycle() == State.CommandLifecycle.SemaphoreExecutionStart) {
+                                System.out.println("$$" + state.getCommandLifecycle() + "$$ " + System.currentTimeMillis() + " #" + _cmd.hashCode() + "# : " + state + " : " + state.timing);
+                                if (state.getCommandLifecycle() == State.CommandLifecycle.Start) {
                                     metrics.markExecutionStart(commandKey, threadPoolKey, isolationStrategy);
                                 }
                             }
@@ -481,7 +468,14 @@ import java.util.concurrent.atomic.AtomicReference;
                         .doOnUnsubscribe(new Action0() {
                             @Override
                             public void call() {
-                                metrics.markExecutionDone(stateCache.getValue(), commandKey, threadPoolKey);
+                                State<R> stateBeforeCancellation = stateCache.getValue();
+                                System.out.println("Unsubscribing going on, current state : " + stateCache.getValue()+ " : " + stateBeforeCancellation.isExecutionComplete());
+                                State<R> stateAfterCancellation = stateBeforeCancellation;
+                                if (!stateBeforeCancellation.isExecutionComplete()) {
+                                    stateAfterCancellation = stateBeforeCancellation.withCancellation();
+                                    stateCache.onNext(stateAfterCancellation);
+                                }
+                                metrics.markExecutionDone(stateAfterCancellation, commandKey, threadPoolKey);
                             }
                         });
 
@@ -2529,7 +2523,12 @@ import java.util.concurrent.atomic.AtomicReference;
      */
     @Override
     public int getNumberEmissions() {
-        return getCommandResult().getEventCounts().getCount(HystrixEventType.EMIT);
+        //return getCommandResult().getEventCounts().getCount(HystrixEventType.EMIT);
+        if (stateCache.hasValue()) {
+            return stateCache.getValue().getEventCounts().getCount(HystrixEventType.EMIT);
+        } else {
+            return 0;
+        }
     }
 
     /**
@@ -2538,12 +2537,22 @@ import java.util.concurrent.atomic.AtomicReference;
      */
     @Override
     public int getNumberFallbackEmissions() {
-        return getCommandResult().getEventCounts().getCount(HystrixEventType.FALLBACK_EMIT);
+        if (stateCache.hasValue()) {
+            return stateCache.getValue().getEventCounts().getCount(HystrixEventType.FALLBACK_EMIT);
+        } else {
+            return 0;
+        }
+        //return getCommandResult().getEventCounts().getCount(HystrixEventType.FALLBACK_EMIT);
     }
 
     @Override
     public int getNumberCollapsed() {
-        return getCommandResult().getEventCounts().getCount(HystrixEventType.COLLAPSED);
+        //return getCommandResult().getEventCounts().getCount(HystrixEventType.COLLAPSED);
+        if (stateCache.hasValue()) {
+            return stateCache.getValue().getEventCounts().getCount(HystrixEventType.COLLAPSED);
+        } else {
+            return 0;
+        }
     }
 
     @Override

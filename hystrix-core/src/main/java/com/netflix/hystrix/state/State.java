@@ -22,7 +22,8 @@ public class State<R> {
 
     private final static Logger logger = LoggerFactory.getLogger(State.class);
 
-    private final CommandDataStyle commandDataStyle;
+    //make private
+    public final CommandDataStyle commandDataStyle;
     private final Class<HystrixInvokable> commandClass;
     private final HystrixCommandKey commandKey;
 
@@ -159,6 +160,7 @@ public class State<R> {
     }
 
     public boolean isExecutionComplete() {
+        System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " : isExecutionComplete : " + this);
         return eventCounts.isExecutionComplete();
     }
 

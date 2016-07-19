@@ -2947,8 +2947,15 @@ public class HystrixCommandTest extends CommonHystrixCommandTests<TestHystrixCom
 
             @Override
             protected Integer run() throws Exception {
+                System.out.println("!!! run()");
                 executionAttempted.set(true);
                 return 3;
+            }
+
+            @Override
+            protected Integer getFallback() {
+                System.out.println("!!! getFallback()");
+                return super.getFallback();
             }
         }
 
@@ -3018,7 +3025,7 @@ public class HystrixCommandTest extends CommonHystrixCommandTests<TestHystrixCom
                 });
 
         try {
-            Thread.sleep(10);
+            Thread.sleep(100);
             s.unsubscribe();
             assertTrue(latch.await(200, TimeUnit.MILLISECONDS));
             assertEquals("Number of execution semaphores in use", 0, cmd.getExecutionSemaphore().getNumberOfPermitsUsed());
@@ -3713,7 +3720,7 @@ public class HystrixCommandTest extends CommonHystrixCommandTests<TestHystrixCom
                         assertTrue(hook.commandEmissionsMatch(1, 0, 1));
                         assertTrue(hook.executionEventsMatch(1, 0, 1));
                         assertTrue(hook.fallbackEventsMatch(0, 0, 0));
-                        assertEquals("onStart - onThreadStart - !onRunStart - onExecutionStart - onExecutionEmit - !onRunSuccess - onExecutionSuccess - !onComplete - onEmit - onSuccess - onThreadComplete - ", hook.executionSequence.toString());
+                        assertEquals("onStart - onThreadStart - !onRunStart - onExecutionStart - onExecutionEmit - !onRunSuccess - !onComplete - onEmit - onExecutionSuccess - onSuccess - onThreadComplete - ", hook.executionSequence.toString());
                     }
                 });
     }
@@ -3813,7 +3820,7 @@ public class HystrixCommandTest extends CommonHystrixCommandTests<TestHystrixCom
                         assertNull(hook.getCommandException());
                         assertEquals(RuntimeException.class, hook.getExecutionException().getClass());
                         assertNull(hook.getFallbackException());
-                        assertEquals("onStart - onThreadStart - !onRunStart - onExecutionStart - onExecutionError - !onRunError - onFallbackStart - onFallbackEmit - !onFallbackSuccess - onFallbackSuccess - !onComplete - onEmit - onSuccess - onThreadComplete - ", hook.executionSequence.toString());
+                        assertEquals("onStart - onThreadStart - !onRunStart - onExecutionStart - onExecutionError - !onRunError - onFallbackStart - onFallbackEmit - !onFallbackSuccess - !onComplete - onEmit - onFallbackSuccess - onSuccess - onThreadComplete - ", hook.executionSequence.toString());
                     }
                 });
     }
@@ -3910,7 +3917,7 @@ public class HystrixCommandTest extends CommonHystrixCommandTests<TestHystrixCom
                         assertTrue(hook.commandEmissionsMatch(1, 0, 1));
                         assertTrue(hook.executionEventsMatch(0, 0, 0));
                         assertTrue(hook.fallbackEventsMatch(1, 0, 1));
-                        assertEquals("onStart - onThreadStart - !onRunStart - onExecutionStart - onThreadComplete - onFallbackStart - onFallbackEmit - !onFallbackSuccess - onFallbackSuccess - !onComplete - onEmit - onSuccess - ", hook.executionSequence.toString());
+                        assertEquals("onStart - onThreadStart - !onRunStart - onExecutionStart - onThreadComplete - onFallbackStart - onFallbackEmit - !onFallbackSuccess - !onComplete - onEmit - onFallbackSuccess - onSuccess - ", hook.executionSequence.toString());
                     }
                 });
     }
@@ -4008,7 +4015,7 @@ public class HystrixCommandTest extends CommonHystrixCommandTests<TestHystrixCom
                         assertTrue(hook.commandEmissionsMatch(1, 0, 1));
                         assertTrue(hook.executionEventsMatch(0, 0, 0));
                         assertTrue(hook.fallbackEventsMatch(1, 0, 1));
-                        assertEquals("onStart - onThreadStart - !onRunStart - onExecutionStart - onThreadComplete - onFallbackStart - onFallbackEmit - !onFallbackSuccess - onFallbackSuccess - !onComplete - onEmit - onSuccess - ", hook.executionSequence.toString());
+                        assertEquals("onStart - onThreadStart - !onRunStart - onExecutionStart - onThreadComplete - onFallbackStart - onFallbackEmit - !onFallbackSuccess - !onComplete - onEmit - onFallbackSuccess - onSuccess - ", hook.executionSequence.toString());
                     }
                 });
     }
@@ -4121,7 +4128,7 @@ public class HystrixCommandTest extends CommonHystrixCommandTests<TestHystrixCom
                         assertTrue(hook.commandEmissionsMatch(1, 0, 1));
                         assertTrue(hook.executionEventsMatch(0, 0, 0));
                         assertTrue(hook.fallbackEventsMatch(1, 0, 1));
-                        assertEquals("onStart - onFallbackStart - onFallbackEmit - !onFallbackSuccess - onFallbackSuccess - !onComplete - onEmit - onSuccess - ", hook.executionSequence.toString());
+                        assertEquals("onStart - onFallbackStart - onFallbackEmit - !onFallbackSuccess - !onComplete - onEmit - onFallbackSuccess - onSuccess - ", hook.executionSequence.toString());
                     }
                 });
     }
@@ -4243,7 +4250,7 @@ public class HystrixCommandTest extends CommonHystrixCommandTests<TestHystrixCom
                         assertNull(hook.getCommandException());
                         assertNull(hook.getExecutionException());
                         assertNull(hook.getFallbackException());
-                        assertEquals("onStart - onFallbackStart - onFallbackEmit - !onFallbackSuccess - onFallbackSuccess - !onComplete - onEmit - onSuccess - ", hook.executionSequence.toString());
+                        assertEquals("onStart - onFallbackStart - onFallbackEmit - !onFallbackSuccess - !onComplete - onEmit - onFallbackSuccess - onSuccess - ", hook.executionSequence.toString());
                     }
                 });
     }
@@ -4341,7 +4348,7 @@ public class HystrixCommandTest extends CommonHystrixCommandTests<TestHystrixCom
                         assertNull(hook.getCommandException());
                         assertNull(hook.getExecutionException());
                         assertNull(hook.getFallbackException());
-                        assertEquals("onStart - onFallbackStart - onFallbackEmit - !onFallbackSuccess - onFallbackSuccess - !onComplete - onEmit - onSuccess - ", hook.executionSequence.toString());
+                        assertEquals("onStart - onFallbackStart - onFallbackEmit - !onFallbackSuccess - !onComplete - onEmit - onFallbackSuccess - onSuccess - ", hook.executionSequence.toString());
                     }
                 });
     }
