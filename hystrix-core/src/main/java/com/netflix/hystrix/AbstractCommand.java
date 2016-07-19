@@ -382,13 +382,21 @@ import java.util.concurrent.atomic.AtomicReference;
                 if (requestCacheEnabled) {
                     Observable<R> fromCache = checkCacheForPreviouslyExecutedCommand(requestCache, cacheKey);
                     if (fromCache != null) {
-                        executionHook.onCacheHit(_cmd);
+                        try {
+                            executionHook.onCacheHit(_cmd);
+                        } catch (Throwable hookEx) {
+                            logger.warn("Error calling HystrixCommandExecutionHook", hookEx);
+                        }
                         return fromCache;
 
                     }
                 }
 
-                executionHook.onStart(_cmd);
+                try {
+                    executionHook.onStart(_cmd);
+                } catch (Throwable hookEx) {
+                    logger.warn("Error calling HystrixCommandExecutionHook.onStart", hookEx);
+                }
                 final ExecutionIsolationStrategy isolationStrategy = properties.executionIsolationStrategy().get();
                 final Observable<State<R>> executionAttempt = applyCircuitBreaker(circuitBreaker, initialState, new Func0<Observable<State<R>>>() {
 
@@ -407,14 +415,14 @@ import java.util.concurrent.atomic.AtomicReference;
                             public Observable<State<R>> call(State<R> state) {
                                 if (state.getExecutionNotification() != null) {
                                     switch (state.getExecutionNotification().getKind()) {
-                                        case OnError     : return applyFallback(state, _cmd);
+                                        case OnError     : return applyFallback(state);
                                         case OnNext      : return Observable.just(state);
                                         case OnCompleted : return Observable.just(state);
                                         default          : return Observable.error(new IllegalArgumentException("Unknown notification type : " + state.getExecutionNotification().getKind()));
                                     }
                                 } else {
                                     if (state.getExecutionThrowable() != null) {
-                                        return applyFallback(state, _cmd);
+                                        return applyFallback(state);
                                     } else {
                                         return Observable.just(state);
                                     }
@@ -635,7 +643,7 @@ import java.util.concurrent.atomic.AtomicReference;
     }
 
     //TODO Make this static
-    private Observable<State<R>> applyFallback(final State<R> stateWithException, final AbstractCommand<R> _cmd) {
+    private Observable<State<R>> applyFallback(final State<R> stateWithException) {
         final Throwable executionThrowable = stateWithException.getExecutionThrowable();
         if (isUnrecoverable(executionThrowable)) {
             Exception e = getExceptionFromThrowable(executionThrowable);
@@ -650,12 +658,21 @@ import java.util.concurrent.atomic.AtomicReference;
             }
 
             if (properties.fallbackEnabled().get()) {
-                final TryableSemaphore fallbackSemaphore = getFallbackSemaphore();
-                final AtomicBoolean fallbackSemaphoreHasBeenReleased = new AtomicBoolean(false);
-                if (fallbackSemaphore.tryAcquire()) {
-                    final Observable<State<R>> fallbackExecution = getFallbackStateObservable(stateWithException);
+                return applyFallbackBulkhead(stateWithException);
+            } else {
+                //TODO Add FALLBACK_DISABLED state
+                return Observable.just(stateWithException);
+            }
+        }
+    }
 
-                    return fallbackExecution
+    private Observable<State<R>> applyFallbackBulkhead(State<R> stateWithException) {
+        final TryableSemaphore fallbackSemaphore = getFallbackSemaphore();
+        final AtomicBoolean fallbackSemaphoreHasBeenReleased = new AtomicBoolean(false);
+        if (fallbackSemaphore.tryAcquire()) {
+            final Observable<State<R>> fallbackExecution = getFallbackStateObservable(stateWithException);
+
+            return fallbackExecution
                         /*
                          * This semaphore must be released as early as possible.
                          * If we chose terminal-only, then unsubscriptions would leave semaphore unreleased
@@ -666,29 +683,24 @@ import java.util.concurrent.atomic.AtomicReference;
                          * By doing it as early as possible, we avoid those problems (and introduce some complexity).
                          */
 
-                            .doOnTerminate(new Action0() {
-                                @Override
-                                public void call() {
-                                    if (fallbackSemaphoreHasBeenReleased.compareAndSet(false, true)) {
-                                        fallbackSemaphore.release();
-                                    }
-                                }
-                            })
-                            .doOnUnsubscribe(new Action0() {
-                                @Override
-                                public void call() {
-                                    if (fallbackSemaphoreHasBeenReleased.compareAndSet(false, true)) {
-                                        fallbackSemaphore.release();
-                                    }
-                                }
-                            });
-                } else {
-                    return Observable.just(stateWithException.withFallbackRejection());
-                }
-            } else {
-                //TODO Add FALLBACK_DISABLED state
-                return Observable.just(stateWithException);
-            }
+                    .doOnTerminate(new Action0() {
+                        @Override
+                        public void call() {
+                            if (fallbackSemaphoreHasBeenReleased.compareAndSet(false, true)) {
+                                fallbackSemaphore.release();
+                            }
+                        }
+                    })
+                    .doOnUnsubscribe(new Action0() {
+                        @Override
+                        public void call() {
+                            if (fallbackSemaphoreHasBeenReleased.compareAndSet(false, true)) {
+                                fallbackSemaphore.release();
+                            }
+                        }
+                    });
+        } else {
+            return Observable.just(stateWithException.withFallbackRejection());
         }
     }
 
