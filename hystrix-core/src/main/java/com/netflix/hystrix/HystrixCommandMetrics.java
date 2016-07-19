@@ -23,6 +23,7 @@ import com.netflix.hystrix.metric.consumer.RollingCommandEventCounterStream;
 import com.netflix.hystrix.metric.consumer.RollingCommandLatencyDistributionStream;
 import com.netflix.hystrix.metric.consumer.RollingCommandMaxConcurrencyStream;
 import com.netflix.hystrix.metric.consumer.RollingCommandUserLatencyDistributionStream;
+import com.netflix.hystrix.state.State;
 import com.netflix.hystrix.strategy.HystrixPlugins;
 import com.netflix.hystrix.strategy.eventnotifier.HystrixEventNotifier;
 import com.netflix.hystrix.util.HystrixRollingNumberEvent;
@@ -331,9 +332,16 @@ public class HystrixCommandMetrics extends HystrixMetrics {
         return concurrentExecutionCount.get();
     }
 
-    /* package-private */ void markCommandStart(HystrixCommandKey commandKey, HystrixThreadPoolKey threadPoolKey, HystrixCommandProperties.ExecutionIsolationStrategy isolationStrategy) {
+    /* package-private */ void markExecutionStart(HystrixCommandKey commandKey, HystrixThreadPoolKey threadPoolKey, HystrixCommandProperties.ExecutionIsolationStrategy isolationStrategy) {
         int currentCount = concurrentExecutionCount.incrementAndGet();
         HystrixThreadEventStream.getInstance().commandExecutionStarted(commandKey, threadPoolKey, isolationStrategy, currentCount);
+    }
+
+    /* package-private */ void markExecutionDone(State<?> state, HystrixCommandKey commandKey, HystrixThreadPoolKey threadPoolKey) {
+        if (state.didExecutionOccur()) {
+            concurrentExecutionCount.decrementAndGet();
+        }
+        HystrixThreadEventStream.getInstance().commandExecutionDone(state, commandKey, threadPoolKey);
     }
 
     /* package-private */ void markCommandDone(ExecutionResult executionResult, HystrixCommandKey commandKey, HystrixThreadPoolKey threadPoolKey, boolean executionStarted) {

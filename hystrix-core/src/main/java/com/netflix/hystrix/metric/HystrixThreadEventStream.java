@@ -22,6 +22,7 @@ import com.netflix.hystrix.HystrixCommandProperties;
 import com.netflix.hystrix.HystrixEventType;
 import com.netflix.hystrix.HystrixThreadPool;
 import com.netflix.hystrix.HystrixThreadPoolKey;
+import com.netflix.hystrix.state.State;
 import rx.functions.Action1;
 import rx.observers.Subscribers;
 import rx.subjects.PublishSubject;
@@ -143,6 +144,10 @@ public class HystrixThreadEventStream {
     public void executionDone(ExecutionResult executionResult, HystrixCommandKey commandKey, HystrixThreadPoolKey threadPoolKey) {
         HystrixCommandCompletion event = HystrixCommandCompletion.from(executionResult, commandKey, threadPoolKey);
         writeOnlyCommandCompletionSubject.onNext(event);
+    }
+
+    public void commandExecutionDone(State<?> state, HystrixCommandKey commandKey, HystrixThreadPoolKey threadPoolKey) {
+        writeOnlyCommandCompletionSubject.onNext(HystrixCommandCompletion.from(state, commandKey, threadPoolKey));
     }
 
     public void collapserResponseFromCache(HystrixCollapserKey collapserKey) {

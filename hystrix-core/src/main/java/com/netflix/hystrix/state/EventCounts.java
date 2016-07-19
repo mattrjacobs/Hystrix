@@ -12,6 +12,8 @@ public class EventCounts {
     private static final int NUM_EVENT_TYPES = ALL_EVENT_TYPES.length;
     private static final BitSet EXCEPTION_PRODUCING_EVENTS = new BitSet(NUM_EVENT_TYPES);
     private static final BitSet COMMAND_REJECTED = new BitSet(NUM_EVENT_TYPES);
+    private static final BitSet FAILED_EXECUTION = new BitSet(NUM_EVENT_TYPES);
+    private static final BitSet COMPLETED_EXECUTION = new BitSet(NUM_EVENT_TYPES);
 
     static {
         for (HystrixEventType eventType: HystrixEventType.EXCEPTION_PRODUCING_EVENT_TYPES) {
@@ -20,6 +22,16 @@ public class EventCounts {
 
         COMMAND_REJECTED.set(HystrixEventType.THREAD_POOL_REJECTED.ordinal());
         COMMAND_REJECTED.set(HystrixEventType.SEMAPHORE_REJECTED.ordinal());
+
+        FAILED_EXECUTION.set(HystrixEventType.BAD_REQUEST.ordinal());
+        FAILED_EXECUTION.set(HystrixEventType.FAILURE.ordinal());
+
+        COMPLETED_EXECUTION.set(HystrixEventType.SUCCESS.ordinal());
+        COMPLETED_EXECUTION.set(HystrixEventType.BAD_REQUEST.ordinal());
+        COMPLETED_EXECUTION.set(HystrixEventType.FALLBACK_FAILURE.ordinal());
+        COMPLETED_EXECUTION.set(HystrixEventType.FALLBACK_MISSING.ordinal());
+        COMPLETED_EXECUTION.set(HystrixEventType.FALLBACK_REJECTION.ordinal());
+        COMPLETED_EXECUTION.set(HystrixEventType.FALLBACK_SUCCESS.ordinal());
     }
 
     private final BitSet events;
@@ -100,35 +112,6 @@ public class EventCounts {
         return new EventCounts(newBitSet, localNumEmits, localNumFallbackEmits, localNumCollapsed);
     }
 
-    EventCounts plus(EventCounts toAdd) {
-        BitSet newBitSet = (BitSet) events.clone();
-        int localNumEmits = numEmissions;
-        int localNumFallbackEmits =  numFallbackEmissions;
-        int localNumCollapsed = numCollapsed;
-        for (HystrixEventType eventType: HystrixEventType.values()) {
-            if (toAdd.contains(eventType)) {
-                switch(eventType) {
-                    case EMIT:
-                        newBitSet.set(HystrixEventType.EMIT.ordinal());
-                        localNumEmits += toAdd.numEmissions;
-                        break;
-                    case FALLBACK_EMIT:
-                        newBitSet.set(HystrixEventType.FALLBACK_EMIT.ordinal());
-                        localNumFallbackEmits += toAdd.numFallbackEmissions;
-                        break;
-                    case COLLAPSED:
-                        newBitSet.set(HystrixEventType.COLLAPSED.ordinal());
-                        localNumCollapsed += toAdd.numCollapsed;
-                        break;
-                    default:
-                        newBitSet.set(eventType.ordinal());
-                        break;
-                }
-            }
-        }
-        return new EventCounts(newBitSet, localNumEmits, localNumFallbackEmits, localNumCollapsed);
-    }
-
     public boolean contains(HystrixEventType eventType) {
         return events.get(eventType.ordinal());
     }
@@ -159,6 +142,18 @@ public class EventCounts {
 
     public boolean isRejected() {
         return containsAnyOf(COMMAND_REJECTED);
+    }
+
+    public boolean isFailedExecution() {
+        return containsAnyOf(FAILED_EXECUTION);
+    }
+
+    public boolean isExecutionComplete() {
+        return containsAnyOf(COMPLETED_EXECUTION);
+    }
+
+    public BitSet getBitSet() {
+        return events;
     }
 
     @Override
@@ -197,6 +192,4 @@ public class EventCounts {
     public static EventCounts create() {
         return new EventCounts();
     }
-
-
 }

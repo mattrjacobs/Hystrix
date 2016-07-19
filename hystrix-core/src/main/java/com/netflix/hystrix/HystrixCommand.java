@@ -19,10 +19,10 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
 import com.netflix.hystrix.state.State;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import rx.Notification;
 import rx.Observable;
-import rx.Observable.OnSubscribe;
-import rx.Subscriber;
 
 import com.netflix.hystrix.exception.HystrixBadRequestException;
 import com.netflix.hystrix.exception.HystrixRuntimeException;
@@ -315,22 +315,51 @@ public abstract class HystrixCommand<R> extends AbstractCommand<R> implements Hy
     }
 
     @Override
-    final protected Observable<State<R>> getExecutionStateObservable(final State<R> commandStart) {
+    final protected Observable<State<R>> getExecutionStateObservable(final State<R> commandStart, final HystrixCommandProperties.ExecutionIsolationStrategy isolationStrategy) {
+        final AbstractCommand<R> _cmd = this;
+
         return Observable.defer(new Func0<Observable<State<R>>>() {
             @Override
             public Observable<State<R>> call() {
-                final State<R> executionStart = commandStart.withExecutionOnThread(Thread.currentThread());
+                final State<R> executionStart;
+                switch (isolationStrategy) {
+                    case SEMAPHORE : executionStart = commandStart.startSemaphoreExecution();
+                        break;
+                    case THREAD    : executionStart = commandStart.startExecutionOnThread(Thread.currentThread());
+                        break;
+                    default        : throw new IllegalStateException("Unexpected isolationStrategy : " + isolationStrategy);
+                }
+
                 Observable<State<R>> executionValue = Observable.defer(new Func0<Observable<State<R>>>() {
                     @Override
                     public Observable<State<R>> call() {
+
+                        Throwable hookStartError = executeExecutionStartHooks(isolationStrategy);
+                        if (hookStartError != null) {
+                            return Observable.just(executionStart.withExecutionNotification(Notification.<R>createOnError(hookStartError)));
+                        }
+
                         try {
-                            State<R> stateWithValue = executionStart.withExecutionNotification(Notification.createOnNext(run()));
-                            return Observable.just(stateWithValue, stateWithValue.withExecutionNotification(Notification.<R>createOnCompleted()));
+                            R userValue = run();
+                            R hookValue = wrapValueWithExecutionHooks(userValue, _cmd);
+                            State<R> onNextState = executionStart.withExecutionNotification(Notification.createOnNext(hookValue));
+
+                            State<R> terminalState;
+                            Throwable hookSuccessError = executeExecutionSuccessHooks(_cmd);
+                            if (hookSuccessError != null) {
+                                terminalState = onNextState.withExecutionNotification(Notification.<R>createOnError(hookSuccessError));
+                            } else {
+                                terminalState = onNextState.withExecutionNotification(Notification.<R>createOnCompleted());
+                            }
+
+                            return Observable.just(onNextState, terminalState);
                         } catch (Throwable ex) {
-                            return Observable.just(executionStart.withExecutionNotification(Notification.<R>createOnError(ex)));
+                            Throwable wrappedEx = wrapFailureWithExecutionFailureHooks(ex, _cmd);
+                            return Observable.just(executionStart.withExecutionNotification(Notification.<R>createOnError(wrappedEx)));
                         }
                     }
                 });
+
                 return executionValue.startWith(commandStart, executionStart);
             }
         });
@@ -338,19 +367,59 @@ public abstract class HystrixCommand<R> extends AbstractCommand<R> implements Hy
 
     @Override
     final protected Observable<State<R>> getFallbackStateObservable(final State<R> executionState) {
+        final AbstractCommand<R> _cmd = this;
+        final boolean shouldApplyFallbackHooks = isFallbackUserSupplied(this);
+
         return Observable.defer(new Func0<Observable<State<R>>>() {
             @Override
             public Observable<State<R>> call() {
-                final State<R> initialFallbackState = executionState.withFallbackExecutionOnThread(Thread.currentThread());
+                final State<R> initialFallbackState = executionState.startFallbackExecution(Thread.currentThread());
                 Observable<State<R>> fallbackExecutionStarted = Observable.just(initialFallbackState);
                 Observable<State<R>> fallbackExecutionValue = Observable.defer(new Func0<Observable<State<R>>>() {
                     @Override
                     public Observable<State<R>> call() {
+
+                        if (shouldApplyFallbackHooks) {
+                            Throwable hookError = executeFallbackStartHooks(_cmd);
+                            if (hookError != null) {
+                                return Observable.just(initialFallbackState.withExecutionNotification(Notification.<R>createOnError(hookError)));
+                            }
+                        }
+
                         try {
-                            State<R> stateWithFallbackValue = initialFallbackState.withFallbackExecutionNotification(Notification.createOnNext(getFallback()));
-                            return Observable.just(stateWithFallbackValue, stateWithFallbackValue.withFallbackExecutionNotification(Notification.<R>createOnCompleted()));
+                            R fallbackValue;
+                            if (shouldApplyFallbackHooks) {
+                                R userFallbackValue = getFallback();
+                                R hookFallbackValue = wrapValueWithFallbackHooks(userFallbackValue, _cmd);
+                                fallbackValue = hookFallbackValue;
+                            } else {
+                                R userFallbackValue = getFallback();
+                                fallbackValue = userFallbackValue;
+                            }
+                            State<R> onNextState = initialFallbackState.withFallbackExecutionNotification(Notification.createOnNext(fallbackValue));
+
+                            State<R> terminalState;
+                            if (shouldApplyFallbackHooks) {
+                                Throwable hookSuccessError = executeFallbackSuccessHooks(_cmd);
+                                if (hookSuccessError != null) {
+                                    terminalState = onNextState.withFallbackExecutionNotification(Notification.<R>createOnError(hookSuccessError));
+                                } else {
+                                    terminalState = onNextState.withFallbackExecutionNotification(Notification.<R>createOnCompleted());
+                                }
+                            } else {
+                                terminalState = onNextState.withFallbackExecutionNotification(Notification.<R>createOnCompleted());
+                            }
+
+                            return Observable.just(onNextState, terminalState);
                         } catch (Throwable ex) {
-                            return Observable.just(initialFallbackState.withFallbackExecutionNotification(Notification.<R>createOnError(ex)));
+                            Throwable fallbackException;
+                            if (shouldApplyFallbackHooks) {
+                                Throwable wrappedEx = wrapFallbackFailureWithFallbackFailureHooks(ex, _cmd);
+                                fallbackException = wrappedEx;
+                            } else {
+                                fallbackException = ex;
+                            }
+                            return Observable.just(initialFallbackState.withFallbackExecutionNotification(Notification.<R>createOnError(fallbackException)));
                         }
                     }
                 });

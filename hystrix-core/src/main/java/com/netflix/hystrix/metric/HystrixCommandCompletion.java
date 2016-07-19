@@ -19,6 +19,8 @@ import com.netflix.hystrix.ExecutionResult;
 import com.netflix.hystrix.HystrixCommandKey;
 import com.netflix.hystrix.HystrixEventType;
 import com.netflix.hystrix.HystrixThreadPoolKey;
+import com.netflix.hystrix.state.EventCounts;
+import com.netflix.hystrix.state.State;
 import com.netflix.hystrix.strategy.concurrency.HystrixRequestContext;
 
 import java.util.ArrayList;
@@ -28,16 +30,34 @@ import java.util.List;
  * Data class which gets fed into event stream when a command completes (with any of the outcomes in {@link HystrixEventType}).
  */
 public class HystrixCommandCompletion extends HystrixCommandEvent {
-    protected final ExecutionResult executionResult;
-    protected final HystrixRequestContext requestContext;
+    private final EventCounts eventCounts;
+    private final ExecutionResult.EventCounts deprecatedEventCounts;
+    private final boolean isExecutedInThread;
+    private final boolean didExecutionOccur;
+    private final long executionLatency;
+    private final long totalLatency;
 
     private final static HystrixEventType[] ALL_EVENT_TYPES = HystrixEventType.values();
 
     HystrixCommandCompletion(ExecutionResult executionResult, HystrixCommandKey commandKey,
                              HystrixThreadPoolKey threadPoolKey, HystrixRequestContext requestContext) {
         super(commandKey, threadPoolKey);
-        this.executionResult = executionResult;
-        this.requestContext = requestContext;
+        this.deprecatedEventCounts = executionResult.getEventCounts();
+        this.eventCounts = null;
+        this.isExecutedInThread = executionResult.isExecutedInThread();
+        this.didExecutionOccur = executionResult.executionOccurred();
+        this.executionLatency = executionResult.getExecutionLatency();
+        this.totalLatency = executionResult.getUserThreadLatency();
+    }
+
+    HystrixCommandCompletion(State<?> state, HystrixCommandKey commandKey, HystrixThreadPoolKey threadPoolKey) {
+        super(commandKey, threadPoolKey);
+        this.eventCounts = state.getEventCounts();
+        this.deprecatedEventCounts = null;
+        this.isExecutedInThread = state.isExecutedInThread();
+        this.didExecutionOccur = state.didExecutionOccur();
+        this.executionLatency = state.getExecutionLatency();
+        this.totalLatency = state.getCommandLatency();
     }
 
     public static HystrixCommandCompletion from(ExecutionResult executionResult, HystrixCommandKey commandKey, HystrixThreadPoolKey threadPoolKey) {
@@ -48,9 +68,13 @@ public class HystrixCommandCompletion extends HystrixCommandEvent {
         return new HystrixCommandCompletion(executionResult, commandKey, threadPoolKey, requestContext);
     }
 
+    public static HystrixCommandCompletion from(State<?> state, HystrixCommandKey commandKey, HystrixThreadPoolKey threadPoolKey) {
+        return new HystrixCommandCompletion(state, commandKey, threadPoolKey);
+    }
+
     @Override
     public boolean isResponseThreadPoolRejected() {
-        return executionResult.isResponseThreadPoolRejected();
+        return getEventCounts().contains(HystrixEventType.THREAD_POOL_REJECTED);
     }
 
     @Override
@@ -60,7 +84,7 @@ public class HystrixCommandCompletion extends HystrixCommandEvent {
 
     @Override
     public boolean isExecutedInThread() {
-        return executionResult.isExecutedInThread();
+        return isExecutedInThread;
     }
 
     @Override
@@ -68,25 +92,30 @@ public class HystrixCommandCompletion extends HystrixCommandEvent {
         return true;
     }
 
+    //TODO Deprecate this
     public HystrixRequestContext getRequestContext() {
-        return this.requestContext;
+        return null;
     }
 
     public ExecutionResult.EventCounts getEventCounts() {
-        return executionResult.getEventCounts();
+        if (deprecatedEventCounts != null) {
+            return deprecatedEventCounts;
+        } else {
+            return new ExecutionResult.EventCounts(eventCounts.getBitSet(), eventCounts.getCount(HystrixEventType.EMIT), eventCounts.getCount(HystrixEventType.FALLBACK_EMIT), eventCounts.getCount(HystrixEventType.COLLAPSED));
+        }
     }
 
     public long getExecutionLatency() {
-        return executionResult.getExecutionLatency();
+        return executionLatency;
     }
 
     public long getTotalLatency() {
-        return executionResult.getUserThreadLatency();
+        return totalLatency;
     }
 
     @Override
     public boolean didCommandExecute() {
-        return executionResult.executionOccurred();
+        return didExecutionOccur;
     }
 
     @Override
@@ -96,14 +125,14 @@ public class HystrixCommandCompletion extends HystrixCommandEvent {
 
         sb.append(getCommandKey().name()).append("[");
         for (HystrixEventType eventType: ALL_EVENT_TYPES) {
-            if (executionResult.getEventCounts().contains(eventType)) {
+            if (eventCounts.contains(eventType)) {
                 foundEventTypes.add(eventType);
             }
         }
         int i = 0;
         for (HystrixEventType eventType: foundEventTypes) {
             sb.append(eventType.name());
-            int eventCount = executionResult.getEventCounts().getCount(eventType);
+            int eventCount = eventCounts.getCount(eventType);
             if (eventCount > 1) {
                 sb.append("x").append(eventCount);
 

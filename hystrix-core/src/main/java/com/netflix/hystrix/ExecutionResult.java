@@ -15,6 +15,8 @@
  */
 package com.netflix.hystrix;
 
+import com.netflix.hystrix.state.EventCounts;
+
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.List;
@@ -63,7 +65,7 @@ public class ExecutionResult {
             this.numCollapsed = 0;
         }
 
-        EventCounts(BitSet events, int numEmissions, int numFallbackEmissions, int numCollapsed) {
+        public EventCounts(BitSet events, int numEmissions, int numFallbackEmissions, int numCollapsed) {
             this.events = events;
             this.numEmissions = numEmissions;
             this.numFallbackEmissions = numFallbackEmissions;
@@ -179,6 +181,8 @@ public class ExecutionResult {
                     ", numCollapsed=" + numCollapsed +
                     '}';
         }
+
+
     }
 
     private ExecutionResult(EventCounts eventCounts, long startTimestamp, int executionLatency,

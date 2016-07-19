@@ -165,7 +165,6 @@ class TestableExecutionHook extends HystrixCommandExecutionHook {
 
     @Override
     public <T> Exception onExecutionError(HystrixInvokable<T> commandInstance, Exception e) {
-        System.out.println("@@@ GOT EX in hook : " + e.getClass().getName());
         executionEmissions.add(Notification.createOnError(e));
         recordHookCall(executionSequence, "onExecutionError");
         return super.onExecutionError(commandInstance, e);
