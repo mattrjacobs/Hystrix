@@ -448,6 +448,8 @@ import java.util.concurrent.atomic.AtomicReference;
                     afterCachePut = commandExecution;
                 }
 
+                final AtomicBoolean commandCleanedUp = new AtomicBoolean(false);
+
                 //strip off all the state and just return the values
                 Observable<R> commandValues = afterCachePut
                         .doOnNext(new Action1<State<R>>() {
@@ -465,17 +467,28 @@ import java.util.concurrent.atomic.AtomicReference;
                                 return state.getValue();
                             }
                         })
+                        .doOnTerminate(new Action0() {
+                            @Override
+                            public void call() {
+                                if (commandCleanedUp.compareAndSet(false, true)) {
+                                    metrics.markExecutionDone(stateCache.getValue(), commandKey, threadPoolKey);
+
+                                }
+                            }
+                        })
                         .doOnUnsubscribe(new Action0() {
                             @Override
                             public void call() {
-                                State<R> stateBeforeCancellation = stateCache.getValue();
-                                System.out.println("Unsubscribing going on, current state : " + stateCache.getValue()+ " : " + stateBeforeCancellation.isExecutionComplete());
-                                State<R> stateAfterCancellation = stateBeforeCancellation;
-                                if (!stateBeforeCancellation.isExecutionComplete()) {
-                                    stateAfterCancellation = stateBeforeCancellation.withCancellation();
-                                    stateCache.onNext(stateAfterCancellation);
+                                if (commandCleanedUp.compareAndSet(false, true)) {
+                                    State<R> stateBeforeCancellation = stateCache.getValue();
+                                    System.out.println("Unsubscribing going on, current state : " + stateCache.getValue() + " : " + stateBeforeCancellation.isExecutionComplete());
+                                    State<R> stateAfterCancellation = stateBeforeCancellation;
+                                    if (!stateBeforeCancellation.isExecutionComplete()) {
+                                        stateAfterCancellation = stateBeforeCancellation.withCancellation();
+                                        stateCache.onNext(stateAfterCancellation);
+                                    }
+                                    metrics.markExecutionDone(stateAfterCancellation, commandKey, threadPoolKey);
                                 }
-                                metrics.markExecutionDone(stateAfterCancellation, commandKey, threadPoolKey);
                             }
                         });
 
@@ -621,13 +634,16 @@ import java.util.concurrent.atomic.AtomicReference;
                     Observable.defer(new Func0<Observable<State<R>>>() {
                                          @Override
                                          public Observable<State<R>> call() {
+                                             System.out.println("!!! timing out the operating and providing timeout!");
                                              HystrixRequestContext.setContextOnCurrentThread(requestContext);
                                              if (stateCache.getValue() != null) {
                                                  if (stateCache.getValue().isExecutedInThread()) {
                                                      executionHook.onThreadComplete(_cmd);
                                                  }
                                              }
-                                             return Observable.just(stateCache.getValue().withTimeout());
+                                             State<R> stateWithTimeout = stateCache.getValue().withTimeout();
+                                             stateCache.onNext(stateWithTimeout);
+                                             return Observable.just(stateWithTimeout);
                                          }
                                      }
                     ));
@@ -2410,6 +2426,7 @@ import java.util.concurrent.atomic.AtomicReference;
     public boolean isResponseTimedOut() {
         //return getCommandResult().getEventCounts().contains(HystrixEventType.TIMEOUT);
         if (stateCache.hasValue()) {
+            System.out.println("!!! Checking state for timeout : " + stateCache.getValue());
             return stateCache.getValue().getEventCounts().contains(HystrixEventType.TIMEOUT);
         } else {
             return false;

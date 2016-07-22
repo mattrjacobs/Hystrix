@@ -2210,7 +2210,7 @@ public class HystrixObservableCommandTest extends CommonHystrixCommandTests<Test
                         assertEquals(HystrixRuntimeException.class, hook.getCommandException().getClass());
                         assertEquals(RuntimeException.class, hook.getExecutionException().getClass());
                         assertEquals(RuntimeException.class, hook.getFallbackException().getClass());
-                        assertEquals("onStart - onThreadStart - !onRunStart - onExecutionStart - onExecutionError - !onRunError - onThreadComplete - onFallbackStart - onFallbackError - onError - ", command.getBuilder().executionHook.executionSequence.toString());
+                        assertEquals("onStart - onThreadStart - !onRunStart - onExecutionStart - onExecutionError - !onRunError - onFallbackStart - onFallbackError - onError - onThreadComplete - ", command.getBuilder().executionHook.executionSequence.toString());
                     }
                 });
     }
@@ -2243,7 +2243,7 @@ public class HystrixObservableCommandTest extends CommonHystrixCommandTests<Test
                         assertEquals(HystrixRuntimeException.class, hook.getCommandException().getClass());
                         assertEquals(RuntimeException.class, hook.getExecutionException().getClass());
                         assertEquals(RuntimeException.class, hook.getFallbackException().getClass());
-                        assertEquals("onStart - onThreadStart - !onRunStart - onExecutionStart - onExecutionError - !onRunError - onThreadComplete - onFallbackStart - onFallbackError - onError - ", command.getBuilder().executionHook.executionSequence.toString());
+                        assertEquals("onStart - onThreadStart - !onRunStart - onExecutionStart - onExecutionError - !onRunError - onFallbackStart - onFallbackError - onError - onThreadComplete - ", command.getBuilder().executionHook.executionSequence.toString());
                     }
                 });
     }
@@ -2276,7 +2276,7 @@ public class HystrixObservableCommandTest extends CommonHystrixCommandTests<Test
                         assertEquals(HystrixRuntimeException.class, hook.getCommandException().getClass());
                         assertEquals(RuntimeException.class, hook.getExecutionException().getClass());
                         assertEquals(RuntimeException.class, hook.getFallbackException().getClass());
-                        assertEquals("onStart - onThreadStart - !onRunStart - onExecutionStart - onExecutionError - !onRunError - onThreadComplete - onFallbackStart - onFallbackError - onError - ", command.getBuilder().executionHook.executionSequence.toString());
+                        assertEquals("onStart - onThreadStart - !onRunStart - onExecutionStart - onExecutionError - !onRunError - onFallbackStart - onFallbackError - onError - onThreadComplete - ", command.getBuilder().executionHook.executionSequence.toString());
                     }
                 });
     }
@@ -2502,21 +2502,19 @@ public class HystrixObservableCommandTest extends CommonHystrixCommandTests<Test
         HystrixObservableCommand<String> command = new HystrixObservableCommand<String>(properties) {
             @Override
             protected Observable<String> construct() {
-                return Observable.create(new OnSubscribe<String>() {
-
+                return Observable.defer(new Func0<Observable<String>>() {
                     @Override
-                    public void call(Subscriber<? super String> t1) {
+                    public Observable<String> call() {
                         try {
                             Thread.sleep(2000);
                         } catch (InterruptedException e) {
                             System.out.println("********** interrupted on timeout");
                             e.printStackTrace();
                         }
-                        // should never reach here
-                        t1.onNext("hello");
-                        t1.onCompleted();
+
+                        return Observable.just("hello");
                     }
-                }).subscribeOn(Schedulers.newThread());
+                }).subscribeOn(Schedulers.io());
             }
 
             @Override
