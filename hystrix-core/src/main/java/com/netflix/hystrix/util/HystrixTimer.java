@@ -18,9 +18,13 @@ package com.netflix.hystrix.util;
 import com.netflix.hystrix.HystrixCollapser;
 import com.netflix.hystrix.HystrixCommand;
 import com.netflix.hystrix.strategy.HystrixPlugins;
+import com.netflix.hystrix.strategy.concurrency.HystrixContextScheduler;
+import com.netflix.hystrix.strategy.concurrency.HystrixTimerScheduler;
 import com.netflix.hystrix.strategy.properties.HystrixPropertiesStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import rx.Scheduler;
+import rx.functions.Func0;
 
 import java.lang.ref.Reference;
 import java.lang.ref.SoftReference;
@@ -37,11 +41,62 @@ import java.util.concurrent.atomic.AtomicReference;
 public class HystrixTimer {
 
     private static final Logger logger = LoggerFactory.getLogger(HystrixTimer.class);
-
     private static HystrixTimer INSTANCE = new HystrixTimer();
 
+//    /* package-private */ final AtomicReference<ScheduledExecutor> executor = new AtomicReference<ScheduledExecutor>(null);
+//    private final AtomicReference<Scheduler> scheduler = new AtomicReference<Scheduler>(null);
+//
+//    private HystrixTimer() {
+//        System.out.println("HystrixTimer Init");
+//        // private to prevent public instantiation
+//        ScheduledExecutor initialExecutor = new ScheduledExecutor();
+//        System.out.println("se : " + initialExecutor);
+//        initialExecutor.initialize();
+//        System.out.println("done with init : " + initialExecutor);
+//
+//        executor.set(initialExecutor);
+//        System.out.println("Done with executor set ");
+//
+//        scheduler.set(new HystrixContextScheduler(HystrixPlugins.getInstance().getConcurrencyStrategy(), executor.get().getThreadPool(), new Func0<Boolean>() {
+//            @Override
+//            public Boolean call() {
+//                return false;
+//            }
+//        }));
+//        System.out.println("Done with scheduler set : " + scheduler.get());
+//    }
+
+    private final ScheduledThreadPoolExecutor executor;
+    private final Scheduler scheduler;
+
     private HystrixTimer() {
-        // private to prevent public instantiation
+        HystrixPropertiesStrategy propertiesStrategy = HystrixPlugins.getInstance().getPropertiesStrategy();
+        int coreSize = propertiesStrategy.getTimerThreadPoolProperties().getCorePoolSize().get();
+
+        ThreadFactory threadFactory = null;
+        if (!PlatformSpecific.isAppEngine()) {
+            threadFactory = new ThreadFactory() {
+                final AtomicInteger counter = new AtomicInteger();
+
+                @Override
+                public Thread newThread(Runnable r) {
+                    Thread thread = new Thread(r, "HystrixTimer-" + counter.incrementAndGet());
+                    thread.setDaemon(true);
+                    return thread;
+                }
+
+            };
+        } else {
+            threadFactory = PlatformSpecific.getAppEngineThreadFactory();
+        }
+
+        executor = new ScheduledThreadPoolExecutor(coreSize, threadFactory);
+        scheduler = new HystrixTimerScheduler(HystrixPlugins.getInstance().getConcurrencyStrategy(), executor, new Func0<Boolean>() {
+            @Override
+            public Boolean call() {
+                return false;
+            }
+        });
     }
 
     /**
@@ -58,13 +113,9 @@ public class HystrixTimer {
      * </p>
      */
     public static void reset() {
-        ScheduledExecutor ex = INSTANCE.executor.getAndSet(null);
-        if (ex != null && ex.getThreadPool() != null) {
-            ex.getThreadPool().shutdownNow();
-        }
+        //TODO need to make this work
     }
 
-    /* package */ AtomicReference<ScheduledExecutor> executor = new AtomicReference<ScheduledExecutor>();
 
     /**
      * Add a {@link TimerListener} that will be executed until it is garbage collected or removed by clearing the returned {@link Reference}.
@@ -88,7 +139,7 @@ public class HystrixTimer {
      * @return reference to the TimerListener that allows cleanup via the <code>clear()</code> method
      */
     public Reference<TimerListener> addTimerListener(final TimerListener listener) {
-        startThreadIfNeeded();
+        //startThreadIfNeeded();
         // add the listener
 
         Runnable r = new Runnable() {
@@ -103,8 +154,12 @@ public class HystrixTimer {
             }
         };
 
-        ScheduledFuture<?> f = executor.get().getThreadPool().scheduleAtFixedRate(r, listener.getIntervalTimeInMilliseconds(), listener.getIntervalTimeInMilliseconds(), TimeUnit.MILLISECONDS);
+        ScheduledFuture<?> f = executor.scheduleAtFixedRate(r, listener.getIntervalTimeInMilliseconds(), listener.getIntervalTimeInMilliseconds(), TimeUnit.MILLISECONDS);
         return new TimerReference(listener, f);
+    }
+
+    public Scheduler getScheduler() {
+        return scheduler;
     }
 
     private static class TimerReference extends SoftReference<TimerListener> {
@@ -130,57 +185,64 @@ public class HystrixTimer {
      * <p>
      * This does the lazy initialization and start of the thread in a thread-safe manner while having little cost the rest of the time.
      */
-    protected void startThreadIfNeeded() {
-        // create and start thread if one doesn't exist
-        while (executor.get() == null || ! executor.get().isInitialized()) {
-            if (executor.compareAndSet(null, new ScheduledExecutor())) {
-                // initialize the executor that we 'won' setting
-                executor.get().initialize();
-            }
-        }
-    }
+//    protected void startThreadIfNeeded() {
+//        // create and start thread if one doesn't exist
+//        while (executor.get() == null || ! executor.get().isInitialized()) {
+//            if (executor.compareAndSet(null, new ScheduledExecutor())) {
+//                // initialize the executor that we 'won' setting
+//                executor.get().initialize();
+//                Scheduler s = new HystrixContextScheduler(HystrixPlugins.getInstance().getConcurrencyStrategy(), executor.get().getThreadPool(), new Func0<Boolean>() {
+//                    @Override
+//                    public Boolean call() {
+//                        return false;
+//                    }
+//                });
+//                scheduler.set(s);
+//            }
+//        }
+//    }
 
-    /* package */ static class ScheduledExecutor {
-        /* package */ volatile ScheduledThreadPoolExecutor executor;
-        private volatile boolean initialized;
-
-        /**
-         * We want this only done once when created in compareAndSet so use an initialize method
-         */
-        public void initialize() {
-
-            HystrixPropertiesStrategy propertiesStrategy = HystrixPlugins.getInstance().getPropertiesStrategy();
-            int coreSize = propertiesStrategy.getTimerThreadPoolProperties().getCorePoolSize().get();
-
-            ThreadFactory threadFactory = null;
-            if (!PlatformSpecific.isAppEngine()) {
-                threadFactory = new ThreadFactory() {
-                    final AtomicInteger counter = new AtomicInteger();
-
-                    @Override
-                    public Thread newThread(Runnable r) {
-                        Thread thread = new Thread(r, "HystrixTimer-" + counter.incrementAndGet());
-                        thread.setDaemon(true);
-                        return thread;
-                    }
-
-                };
-            } else {
-                threadFactory = PlatformSpecific.getAppEngineThreadFactory();
-            }
-
-            executor = new ScheduledThreadPoolExecutor(coreSize, threadFactory);
-            initialized = true;
-        }
-
-        public ScheduledThreadPoolExecutor getThreadPool() {
-            return executor;
-        }
-
-        public boolean isInitialized() {
-            return initialized;
-        }
-    }
+//    /* package */ static class ScheduledExecutor {
+//        /* package */ volatile ScheduledThreadPoolExecutor executor;
+//        private volatile boolean initialized;
+//
+//        /**
+//         * We want this only done once when created in compareAndSet so use an initialize method
+//         */
+//        public void initialize() {
+//
+//            HystrixPropertiesStrategy propertiesStrategy = HystrixPlugins.getInstance().getPropertiesStrategy();
+//            int coreSize = propertiesStrategy.getTimerThreadPoolProperties().getCorePoolSize().get();
+//
+//            ThreadFactory threadFactory = null;
+//            if (!PlatformSpecific.isAppEngine()) {
+//                threadFactory = new ThreadFactory() {
+//                    final AtomicInteger counter = new AtomicInteger();
+//
+//                    @Override
+//                    public Thread newThread(Runnable r) {
+//                        Thread thread = new Thread(r, "HystrixTimer-" + counter.incrementAndGet());
+//                        thread.setDaemon(true);
+//                        return thread;
+//                    }
+//
+//                };
+//            } else {
+//                threadFactory = PlatformSpecific.getAppEngineThreadFactory();
+//            }
+//
+//            executor = new ScheduledThreadPoolExecutor(coreSize, threadFactory);
+//            initialized = true;
+//        }
+//
+//        public ScheduledThreadPoolExecutor getThreadPool() {
+//            return executor;
+//        }
+//
+//        public boolean isInitialized() {
+//            return initialized;
+//        }
+//    }
 
     public static interface TimerListener {
 

@@ -646,7 +646,8 @@ import java.util.concurrent.atomic.AtomicReference;
                                              return Observable.just(stateWithTimeout);
                                          }
                                      }
-                    ));
+                    ),
+                    HystrixTimer.getInstance().getScheduler());
         } else {
             return execution;
         }

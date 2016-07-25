@@ -2555,6 +2555,7 @@ public class HystrixObservableCommandTest extends CommonHystrixCommandTests<Test
 
             @Override
             public void call(Throwable t1) {
+                t1.printStackTrace();
                 System.out.println("onError: " + t1);
                 System.out.println("onError Thread: " + Thread.currentThread());
                 System.out.println("ThreadContext in onError: " + HystrixRequestContext.isCurrentThreadInitialized());
@@ -2567,6 +2568,7 @@ public class HystrixObservableCommandTest extends CommonHystrixCommandTests<Test
         ts.awaitTerminalEvent();
 
         assertTrue(isRequestContextInitialized.get());
+        System.out.println("onError Thread : " + onErrorThread.get().getName());
         assertTrue(onErrorThread.get().getName().startsWith("HystrixTimer"));
 
         List<Throwable> errors = ts.getOnErrorEvents();
