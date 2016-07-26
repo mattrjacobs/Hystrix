@@ -24,10 +24,13 @@ import com.netflix.hystrix.HystrixCommandProperties.ExecutionIsolationStrategy;
 import com.netflix.hystrix.strategy.executionhook.HystrixCommandExecutionHook;
 import com.netflix.hystrix.strategy.properties.HystrixPropertiesStrategy;
 import com.netflix.hystrix.strategy.eventnotifier.HystrixEventNotifier;
+import rx.functions.Action0;
 import rx.functions.Action1;
 import rx.functions.Func0;
 import rx.functions.Func1;
 import rx.functions.Func2;
+
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Used to wrap code that will execute potentially risky functionality (typically meaning a service call over the network)
@@ -250,15 +253,25 @@ public abstract class HystrixObservableCommand<R> extends AbstractCommand<R> imp
     protected Observable<State<R>> getExecutionStateObservable(final State<R> commandStart, final ExecutionIsolationStrategy isolationStrategy) {
         final AbstractCommand<R> _cmd = this;
         final HystrixRequestContext currentContext = HystrixRequestContext.getContextForCurrentThread();
+        final AtomicReference<Action0> cleanupHystrixStaticState = new AtomicReference<Action0>(new Action0() {
+            @Override
+            public void call() {
+
+            }
+        });
 
         return Observable.defer(new Func0<Observable<State<R>>>() {
             @Override
             public Observable<State<R>> call() {
                 final State<R> executionStart;
                 switch (isolationStrategy) {
-                    case SEMAPHORE : executionStart = commandStart.startSemaphoreExecution();
+                    case SEMAPHORE :
+                        executionStart = commandStart.startSemaphoreExecution();
+                        cleanupHystrixStaticState.set(Hystrix.startCurrentThreadExecutingCommand(getCommandKey()));
                         break;
-                    case THREAD    : executionStart = commandStart.startExecutionOnThread(Thread.currentThread());
+                    case THREAD    :
+                        executionStart = commandStart.startExecutionOnThread(Thread.currentThread());
+                        cleanupHystrixStaticState.set(Hystrix.startCurrentThreadExecutingCommand(getCommandKey()));
                         break;
                     default        : throw new IllegalStateException("Unexpected isolationStrategy : " + isolationStrategy);
                 }
@@ -309,7 +322,8 @@ public abstract class HystrixObservableCommand<R> extends AbstractCommand<R> imp
 
                                     }
                                 }
-                            });
+                            }).doOnUnsubscribe(cleanupHystrixStaticState.get());
+
 
                 } catch (Throwable syncConstructEx) {
                     //in case construct() throws synchronous error

@@ -122,6 +122,7 @@ public class HystrixTimer {
     }
 
     public Scheduler getScheduler() {
+        startThreadIfNeeded();
         return scheduler.get();
     }
 

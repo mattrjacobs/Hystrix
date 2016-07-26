@@ -2915,8 +2915,6 @@ public class HystrixObservableCommandTest extends CommonHystrixCommandTests<Test
                 return Observable.defer(new Func0<Observable<Boolean>>() {
                     @Override
                     public Observable<Boolean> call() {
-                        System.out.println("INSIDE ReqCtx : " + HystrixRequestContext.getContextForCurrentThread());
-
                         results.isContextInitialized.set(HystrixRequestContext.isCurrentThreadInitialized());
                         results.originThread.set(Thread.currentThread());
                         return Observable.just(true);
