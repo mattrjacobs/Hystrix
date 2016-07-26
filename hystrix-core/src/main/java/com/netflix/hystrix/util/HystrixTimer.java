@@ -43,19 +43,12 @@ public class HystrixTimer {
     private static HystrixTimer INSTANCE = new HystrixTimer();
 
     final AtomicReference<ScheduledExecutor> executor = new AtomicReference<ScheduledExecutor>(null);
-    private final AtomicReference<Scheduler> scheduler = new AtomicReference<Scheduler>(null);
 
     private HystrixTimer() {
         ScheduledExecutor scheduledExecutor = new ScheduledExecutor();
         scheduledExecutor.initialize();
 
         executor.set(scheduledExecutor);
-        scheduler.set(new HystrixTimerScheduler(HystrixPlugins.getInstance().getConcurrencyStrategy(), executor.get().getThreadPool(), new Func0<Boolean>() {
-            @Override
-            public Boolean call() {
-                return false;
-            }
-        }));
     }
 
     /**
@@ -75,7 +68,6 @@ public class HystrixTimer {
         ScheduledExecutor scheduledExecutor = getInstance().executor.getAndSet(null);
         if (scheduledExecutor != null) {
             scheduledExecutor.executor.shutdownNow();
-            getInstance().scheduler.set(null);
         }
     }
 
@@ -123,7 +115,7 @@ public class HystrixTimer {
 
     public Scheduler getScheduler() {
         startThreadIfNeeded();
-        return scheduler.get();
+        return executor.get().getScheduler();
     }
 
     private static class TimerReference extends SoftReference<TimerListener> {
@@ -154,19 +146,13 @@ public class HystrixTimer {
             if (executor.compareAndSet(null, new ScheduledExecutor())) {
                 // initialize the executor that we 'won' setting
                 executor.get().initialize();
-                Scheduler s = new HystrixTimerScheduler(HystrixPlugins.getInstance().getConcurrencyStrategy(), executor.get().getThreadPool(), new Func0<Boolean>() {
-                    @Override
-                    public Boolean call() {
-                        return false;
-                    }
-                });
-                scheduler.set(s);
             }
         }
     }
 
     /* package */ static class ScheduledExecutor {
         /* package */ volatile ScheduledThreadPoolExecutor executor;
+        private volatile Scheduler scheduler;
         private volatile boolean initialized;
 
         /**
@@ -195,11 +181,21 @@ public class HystrixTimer {
             }
 
             executor = new ScheduledThreadPoolExecutor(coreSize, threadFactory);
+            scheduler = new HystrixTimerScheduler(HystrixPlugins.getInstance().getConcurrencyStrategy(), executor, new Func0<Boolean>() {
+                @Override
+                public Boolean call() {
+                    return false;
+                }
+            });
             initialized = true;
         }
 
         public ScheduledThreadPoolExecutor getThreadPool() {
             return executor;
+        }
+
+        public Scheduler getScheduler() {
+            return scheduler;
         }
 
         public boolean isInitialized() {
