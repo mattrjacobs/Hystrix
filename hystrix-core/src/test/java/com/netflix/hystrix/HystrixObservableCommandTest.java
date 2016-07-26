@@ -2905,25 +2905,24 @@ public class HystrixObservableCommandTest extends CommonHystrixCommandTests<Test
     /* ******************************************************************************************************** */
 
     private RequestContextTestResults testRequestContextOnSuccess(ExecutionIsolationStrategy isolation, final Scheduler userScheduler) {
+        System.out.println("OUTSIDE ReqCtx : " + HystrixRequestContext.getContextForCurrentThread());
         final RequestContextTestResults results = new RequestContextTestResults();
         TestHystrixObservableCommand<Boolean> command = new TestHystrixObservableCommand<Boolean>(TestHystrixObservableCommand.testPropsBuilder()
                 .setCommandPropertiesDefaults(HystrixCommandPropertiesTest.getUnitTestPropertiesSetter().withExecutionIsolationStrategy(isolation))) {
 
             @Override
             protected Observable<Boolean> construct() {
-                return Observable.create(new OnSubscribe<Boolean>() {
-
+                return Observable.defer(new Func0<Observable<Boolean>>() {
                     @Override
-                    public void call(Subscriber<? super Boolean> s) {
+                    public Observable<Boolean> call() {
+                        System.out.println("INSIDE ReqCtx : " + HystrixRequestContext.getContextForCurrentThread());
+
                         results.isContextInitialized.set(HystrixRequestContext.isCurrentThreadInitialized());
                         results.originThread.set(Thread.currentThread());
-                        s.onNext(true);
-                        s.onCompleted();
+                        return Observable.just(true);
                     }
-
                 }).subscribeOn(userScheduler);
             }
-
         };
 
         results.command = command;

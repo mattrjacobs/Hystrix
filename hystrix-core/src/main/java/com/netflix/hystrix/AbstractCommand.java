@@ -634,7 +634,6 @@ import java.util.concurrent.atomic.AtomicReference;
                     Observable.defer(new Func0<Observable<State<R>>>() {
                                          @Override
                                          public Observable<State<R>> call() {
-                                             System.out.println("!!! timing out the operating and providing timeout!");
                                              HystrixRequestContext.setContextOnCurrentThread(requestContext);
                                              if (stateCache.getValue() != null) {
                                                  if (stateCache.getValue().isExecutedInThread()) {
@@ -653,7 +652,6 @@ import java.util.concurrent.atomic.AtomicReference;
         }
     }
 
-    //TODO Make this static
     private Observable<State<R>> applyFallback(final State<R> stateWithException) {
         final Throwable executionThrowable = stateWithException.getExecutionThrowable();
         if (isUnrecoverable(executionThrowable)) {

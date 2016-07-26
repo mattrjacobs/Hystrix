@@ -16,6 +16,7 @@
 package com.netflix.hystrix;
 
 import com.netflix.hystrix.state.State;
+import com.netflix.hystrix.strategy.concurrency.HystrixRequestContext;
 import rx.Notification;
 import rx.Observable;
 
@@ -23,6 +24,7 @@ import com.netflix.hystrix.HystrixCommandProperties.ExecutionIsolationStrategy;
 import com.netflix.hystrix.strategy.executionhook.HystrixCommandExecutionHook;
 import com.netflix.hystrix.strategy.properties.HystrixPropertiesStrategy;
 import com.netflix.hystrix.strategy.eventnotifier.HystrixEventNotifier;
+import rx.functions.Action1;
 import rx.functions.Func0;
 import rx.functions.Func1;
 import rx.functions.Func2;
@@ -247,6 +249,7 @@ public abstract class HystrixObservableCommand<R> extends AbstractCommand<R> imp
     @Override
     protected Observable<State<R>> getExecutionStateObservable(final State<R> commandStart, final ExecutionIsolationStrategy isolationStrategy) {
         final AbstractCommand<R> _cmd = this;
+        final HystrixRequestContext currentContext = HystrixRequestContext.getContextForCurrentThread();
 
         return Observable.defer(new Func0<Observable<State<R>>>() {
             @Override
@@ -269,6 +272,12 @@ public abstract class HystrixObservableCommand<R> extends AbstractCommand<R> imp
                 Observable<State<R>> actualExecution;
                 try {
                     actualExecution = construct()
+                            .doOnEach(new Action1<Notification<? super R>>() {
+                                @Override
+                                public void call(Notification<? super R> notification) {
+                                    HystrixRequestContext.setContextOnCurrentThread(currentContext);
+                                }
+                            })
                             .map(new Func1<R, R>() {
                                 @Override
                                 public R call(R userValue) {
@@ -318,6 +327,7 @@ public abstract class HystrixObservableCommand<R> extends AbstractCommand<R> imp
         final AbstractCommand<R> _cmd = this;
         final boolean shouldApplyFallbackHooks = isFallbackUserSupplied(this);
         final State<R> initialFallbackState = executionState.startFallbackExecution(Thread.currentThread());
+        final HystrixRequestContext currentContext = HystrixRequestContext.getContextForCurrentThread();
 
         return Observable.defer(new Func0<Observable<State<R>>>() {
             @Override
@@ -330,9 +340,15 @@ public abstract class HystrixObservableCommand<R> extends AbstractCommand<R> imp
                 }
 
                 try {
+                    Observable<R> fallbackWithContext = resumeWithFallback().doOnEach(new Action1<Notification<? super R>>() {
+                        @Override
+                        public void call(Notification<? super R> notification) {
+                            HystrixRequestContext.setContextOnCurrentThread(currentContext);
+                        }
+                    });
                     Observable<R> fallbackValue;
                     if (shouldApplyFallbackHooks) {
-                        Observable<R> userFallbackValue = resumeWithFallback();
+                        Observable<R> userFallbackValue = fallbackWithContext;
                         Observable<R> hookFallbackValue = userFallbackValue.map(new Func1<R, R>() {
                             @Override
                             public R call(R r) {
@@ -341,7 +357,7 @@ public abstract class HystrixObservableCommand<R> extends AbstractCommand<R> imp
                         });
                         fallbackValue = hookFallbackValue;
                     } else {
-                        Observable<R> userFallbackValue = resumeWithFallback();
+                        Observable<R> userFallbackValue = fallbackWithContext;
                         fallbackValue = userFallbackValue;
                     }
 

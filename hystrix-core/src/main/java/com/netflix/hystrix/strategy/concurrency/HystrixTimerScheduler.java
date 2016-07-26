@@ -24,11 +24,14 @@ import rx.internal.schedulers.ScheduledAction;
 import rx.subscriptions.*;
 
 import com.netflix.hystrix.HystrixThreadPool;
-import com.netflix.hystrix.strategy.HystrixPlugins;
 
 /**
- * Wrap a {@link Scheduler} so that scheduled actions are wrapped with {@link HystrixContexSchedulerAction} so that
+ * Wrap a {@link Scheduler} so that actions scheduled on a timer are wrapped with {@link HystrixContexSchedulerAction} so that
  * the {@link HystrixRequestContext} is properly copied across threads (if they are used by the {@link Scheduler}).
+ *
+ * This is different from the {@link HystrixContextScheduler} in 2 ways:
+ * - It supports scheduling a task in the future (this is disabled in {@link HystrixContextScheduler}).
+ * - It doesn't use a {@link HystrixThreadPool} - it just uses a {@link ScheduledThreadPoolExecutor}.
  */
 public class HystrixTimerScheduler extends Scheduler {
 
