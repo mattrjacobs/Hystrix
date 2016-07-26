@@ -22,6 +22,7 @@ import com.netflix.hystrix.collapser.RealCollapserTimer;
 import com.netflix.hystrix.collapser.RequestCollapser;
 import com.netflix.hystrix.collapser.RequestCollapserFactory;
 import com.netflix.hystrix.exception.HystrixRuntimeException;
+import com.netflix.hystrix.state.State;
 import com.netflix.hystrix.strategy.HystrixPlugins;
 import com.netflix.hystrix.strategy.concurrency.HystrixRequestContext;
 import com.netflix.hystrix.strategy.metrics.HystrixMetricsPublisherFactory;
@@ -35,6 +36,7 @@ import rx.Subscription;
 import rx.functions.Action0;
 import rx.functions.Action1;
 import rx.functions.Func0;
+import rx.functions.Func1;
 import rx.schedulers.Schedulers;
 import rx.subjects.ReplaySubject;
 
@@ -67,7 +69,7 @@ public abstract class HystrixCollapser<BatchReturnType, ResponseType, RequestArg
     static final Logger logger = LoggerFactory.getLogger(HystrixCollapser.class);
 
     private final RequestCollapserFactory<BatchReturnType, ResponseType, RequestArgumentType> collapserFactory;
-    private final HystrixRequestCache requestCache;
+    private final HystrixCollapserRequestCache requestCache;
     private final HystrixCollapserBridge<BatchReturnType, ResponseType, RequestArgumentType> collapserInstanceWrapper;
     private final HystrixCollapserMetrics metrics;
 
@@ -127,7 +129,7 @@ public abstract class HystrixCollapser<BatchReturnType, ResponseType, RequestArg
 
         HystrixCollapserProperties properties = HystrixPropertiesFactory.getCollapserProperties(collapserKey, propertiesBuilder);
         this.collapserFactory = new RequestCollapserFactory<BatchReturnType, ResponseType, RequestArgumentType>(collapserKey, scope, timer, properties);
-        this.requestCache = HystrixRequestCache.getInstance(collapserKey, HystrixPlugins.getInstance().getConcurrencyStrategy());
+        this.requestCache = HystrixCollapserRequestCache.getInstance(collapserKey, HystrixPlugins.getInstance().getConcurrencyStrategy());
 
         if (metrics == null) {
             this.metrics = HystrixCollapserMetrics.getInstance(collapserKey, properties);
@@ -385,28 +387,28 @@ public abstract class HystrixCollapser<BatchReturnType, ResponseType, RequestArg
                 final boolean isRequestCacheEnabled = getProperties().requestCacheEnabled().get();
                 final String cacheKey = getCacheKey();
 
-//                /* try from cache first */
-//                if (isRequestCacheEnabled) {
-//                    HystrixCachedObservable<ResponseType> fromCache = requestCache.get(cacheKey);
-//                    if (fromCache != null) {
-//                        metrics.markResponseFromCache();
-//                        return fromCache.toObservable();
-//                    }
-//                }
+                /* try from cache first */
+                if (isRequestCacheEnabled) {
+                    HystrixCachedObservable<ResponseType> fromCache = requestCache.get(cacheKey);
+                    if (fromCache != null) {
+                        metrics.markResponseFromCache();
+                        return fromCache.toObservable();
+                    }
+                }
 
                 RequestCollapser<BatchReturnType, ResponseType, RequestArgumentType> requestCollapser = collapserFactory.getRequestCollapser(collapserInstanceWrapper);
                 Observable<ResponseType> response = requestCollapser.submitRequest(getRequestArgument());
 
-//                if (isRequestCacheEnabled && cacheKey != null) {
-//                    HystrixCachedObservable<ResponseType> toCache = HystrixCachedObservable.from(response);
-//                    HystrixCachedObservable<ResponseType> fromCache = requestCache.putIfAbsent(cacheKey, toCache);
-//                    if (fromCache == null) {
-//                        return toCache.toObservable();
-//                    } else {
-//                        toCache.unsubscribe();
-//                        return fromCache.toObservable();
-//                    }
-//                }
+                if (isRequestCacheEnabled && cacheKey != null) {
+                    HystrixCachedObservable<ResponseType> toCache = HystrixCachedObservable.from(response);
+                    HystrixCachedObservable<ResponseType> fromCache = requestCache.putIfAbsent(cacheKey, toCache);
+                    if (fromCache == null) {
+                        return toCache.toObservable();
+                    } else {
+                        toCache.unsubscribe();
+                        return fromCache.toObservable();
+                    }
+                }
                 return response;
             }
         });

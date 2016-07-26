@@ -303,8 +303,9 @@ import java.util.concurrent.atomic.AtomicReference;
      * @param sizeOfBatch number of commands in request batch
      */
     /* package */void markAsCollapsedCommand(HystrixCollapserKey collapserKey, int sizeOfBatch) {
+        State<R> initialCollapsedState = State.create(getCommandDataStyle(), getClass(), getCommandKey(), collapserKey, sizeOfBatch);
         eventNotifier.markEvent(HystrixEventType.COLLAPSED, this.commandKey);
-        executionResult = executionResult.markCollapsed(collapserKey, sizeOfBatch);
+        stateCache.onNext(initialCollapsedState);
     }
 
     /**
@@ -360,14 +361,23 @@ import java.util.concurrent.atomic.AtomicReference;
         return Observable.defer(new Func0<Observable<R>>() {
             @Override
             public Observable<R> call() {
-                if (stateCache.hasValue()) {
-                    IllegalStateException ex = new IllegalStateException("This instance can only be executed once. Please instantiate a new instance.");
-                    //TODO make a new error type for this
-                    return Observable.error(new HystrixRuntimeException(FailureType.BAD_REQUEST_EXCEPTION, _cmd.getClass(), getLogMessagePrefix() + " command executed multiple times - this is not permitted.", ex, null));
-                }
+                final State<R> initialState;
 
-                final State<R> initialState = State.create(getCommandDataStyle(), (Class<HystrixInvokable>) _invokable.getClass(), _cmd.commandKey);
-                stateCache.onNext(initialState); //if this command instance gets observed again, cache will be non-empty
+                if (stateCache.hasValue()) {
+                    //if initial state was set up by collapser, then it's ok for this state to exist (this is inelegant)
+                    State<R> initialStateFromCache = stateCache.getValue();
+                    if (initialStateFromCache.isCreatedByCollapser()) {
+                        initialState = initialStateFromCache;
+                    } else {
+                        IllegalStateException ex = new IllegalStateException("This instance can only be executed once. Please instantiate a new instance.");
+                        //TODO make a new error type for this
+                        return Observable.error(new HystrixRuntimeException(FailureType.BAD_REQUEST_EXCEPTION, _cmd.getClass(), getLogMessagePrefix() + " command executed multiple times - this is not permitted.", ex, null));
+                    }
+                } else {
+                    //set up a new state to start execution with
+                    initialState = State.create(getCommandDataStyle(), _invokable.getClass(), _cmd.commandKey);
+                    stateCache.onNext(initialState); //if this command instance gets observed again, cache will be non-empty
+                }
 
                 if (properties.requestLogEnabled().get()) {
                     // log this command execution regardless of what happened

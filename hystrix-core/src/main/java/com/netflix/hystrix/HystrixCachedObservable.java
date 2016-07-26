@@ -33,10 +33,6 @@ public class HystrixCachedObservable<R> {
                 });
     }
 
-    public static <R> HystrixCachedObservable<R> from(Observable<R> o, AbstractCommand<R> originalCommand) {
-        return new HystrixCommandResponseFromCache<R>(o, originalCommand);
-    }
-
     public static <R> HystrixCachedObservable<R> from(Observable<R> o) {
         return new HystrixCachedObservable<R>(o);
     }
