@@ -24,7 +24,7 @@ public class State<R> {
 
     //make private
     public final CommandDataStyle commandDataStyle;
-    private final Class<HystrixInvokable> commandClass;
+    private final Class<? extends HystrixInvokable> commandClass;
     private final HystrixCommandKey commandKey;
 
     private final EventCounts eventCounts;
@@ -38,7 +38,7 @@ public class State<R> {
 
     private final boolean fromCache;
 
-    private State(CommandDataStyle commandDataStyle, Class<HystrixInvokable> commandClass, HystrixCommandKey commandKey,
+    private State(CommandDataStyle commandDataStyle, Class<? extends HystrixInvokable> commandClass, HystrixCommandKey commandKey,
                   EventCounts eventCounts, Timing timing, CommandLifecycle commandLifecycle,
                   Run<R> run, Run<R> fallbackRun, Throwable commandThrowable, boolean fromCache) {
         this.commandDataStyle = commandDataStyle;
@@ -53,7 +53,7 @@ public class State<R> {
         this.fromCache = fromCache;
     }
 
-    public static <R> State<R> create(CommandDataStyle commandDataStyle, Class<HystrixInvokable> commandClass, HystrixCommandKey commandKey) {
+    public static <R> State<R> create(CommandDataStyle commandDataStyle, Class<? extends HystrixInvokable> commandClass, HystrixCommandKey commandKey) {
         return new State<R>(commandDataStyle, commandClass, commandKey, EventCounts.create(), Timing.startCommand(System.currentTimeMillis()),
                 CommandLifecycle.Start, Run.<R>empty(), Run.<R>empty(), null, false);
     }
@@ -393,7 +393,7 @@ public class State<R> {
 
     private static Throwable getUserFacingThrowable(Throwable executionException, Throwable fallbackException,
                                              HystrixEventType eventType, HystrixEventType fallbackEventType,
-                                             Class<HystrixInvokable> commandClass, HystrixCommandKey commandKey) {
+                                             Class<? extends HystrixInvokable> commandClass, HystrixCommandKey commandKey) {
         return new HystrixRuntimeException(getFailureTypeForFallbackException(eventType), commandClass,
                 commandKey.name() + " " + getExecutionMessageForFallbackException(eventType) + " and " + getFallbackExecutionMessage(fallbackEventType) + ".",
                 executionException, fallbackException);
