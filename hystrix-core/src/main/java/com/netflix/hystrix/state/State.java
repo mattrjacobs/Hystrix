@@ -209,6 +209,9 @@ public class State<R> {
                     }
                 case OnError:
                     HystrixEventType eventType = getEventType(notification.getThrowable());
+                    if (eventType.equals(HystrixEventType.SEMAPHORE_REJECTED)) {
+                        logger.debug("HystrixCommand Execution Rejection by Semaphore."); // debug only since we're throwing the exception and someone higher will do something with it
+                    }
                     return new State<R>(commandDataStyle, commandClass, commandKey,
                             eventCounts.plus(eventType), updatedTiming, CommandLifecycle.Execution,
                             run.withExecutionNotification(notification), fallbackRun, commandThrowable, fromCache);
@@ -252,6 +255,17 @@ public class State<R> {
                     }
                 case OnError:
                     HystrixEventType fallbackEventType = getFallbackEventType(notification.getThrowable());
+                    if (fallbackEventType.equals(HystrixEventType.FALLBACK_MISSING)) {
+                        logger.debug("No fallback for HystrixCommand. ", notification.getThrowable()); // debug only since we're throwing the exception and someone higher will do something with it
+                    } else if (fallbackEventType.equals(HystrixEventType.FALLBACK_FAILURE)) {
+                        logger.debug("HystrixCommand execution " +
+                                getFailureTypeForFallbackException(getTerminalExecutionEventType()).name() + " and fallback failed.", notification.getThrowable());
+                    } else if (fallbackEventType.equals(HystrixEventType.FALLBACK_REJECTION)) {
+                        logger.debug("HystrixCommand Fallback Rejection."); // debug only since we're throwing the exception and someone higher will do something with it
+                        //TODO add back once FALLBACK_DISABLED type has been defined
+                        //} else if (fallbackEventType.equals(HystrixEventType.FALLBACK_DISABLED)) {
+                    //    logger.debug("Fallback disabled for HystrixCommand so will throw HystrixRuntimeException. ", notification.getThrowable()); // debug only since we're throwing the exception and someone higher will do something with it
+                    }
                     Throwable userFacingThrowable = getUserFacingThrowable(getExecutionThrowable(), notification.getThrowable(),
                             getTerminalExecutionEventType(), fallbackEventType,
                             commandClass, commandKey);
@@ -429,6 +443,7 @@ public class State<R> {
 
     private static HystrixEventType getFallbackEventType(Throwable t) {
         if (t instanceof UnsupportedOperationException) {
+
             return HystrixEventType.FALLBACK_MISSING;
         } else {
             return HystrixEventType.FALLBACK_FAILURE;

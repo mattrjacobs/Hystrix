@@ -653,6 +653,7 @@ import java.util.concurrent.atomic.AtomicReference;
     }
 
     private Observable<State<R>> applyFallback(final State<R> stateWithException) {
+        logger.debug("Error executing HystrixCommand.run(). Proceeding to fallback logic ...", stateWithException.getExecutionThrowable());
         final Throwable executionThrowable = stateWithException.getExecutionThrowable();
         if (isUnrecoverable(executionThrowable)) {
             Exception e = getExceptionFromThrowable(executionThrowable);
