@@ -2986,7 +2986,7 @@ public class HystrixCommandTest extends CommonHystrixCommandTests<TestHystrixCom
             @Override
             protected Boolean run() {
                 try {
-                    Thread.sleep(100);
+                    Thread.sleep(500);
                     return true;
                 } catch (InterruptedException ex) {
                     throw new RuntimeException(ex);
@@ -3030,6 +3030,7 @@ public class HystrixCommandTest extends CommonHystrixCommandTests<TestHystrixCom
             assertTrue(latch.await(200, TimeUnit.MILLISECONDS));
             assertEquals("Number of execution semaphores in use", 0, cmd.getExecutionSemaphore().getNumberOfPermitsUsed());
             assertEquals("Number of fallback semaphores in use", 0, cmd.getFallbackSemaphore().getNumberOfPermitsUsed());
+            System.out.println("ReqLog : " + HystrixRequestLog.getCurrentRequest().getExecutedCommandsAsString());
             assertFalse(cmd.isExecutionComplete());
             assertEquals(null, cmd.getFailedExecutionException());
             assertNull(cmd.getExecutionException());
@@ -3038,7 +3039,6 @@ public class HystrixCommandTest extends CommonHystrixCommandTests<TestHystrixCom
             assertFalse(cmd.isSuccessfulExecution());
             assertCommandExecutionEvents(cmd, HystrixEventType.CANCELLED);
             assertEquals(0, cmd.metrics.getCurrentConcurrentExecutionCount());
-            System.out.println("ReqLog : " + HystrixRequestLog.getCurrentRequest().getExecutedCommandsAsString());
             assertSaneHystrixRequestLog(1);
         } catch (InterruptedException ex) {
             ex.printStackTrace();
@@ -3059,7 +3059,7 @@ public class HystrixCommandTest extends CommonHystrixCommandTests<TestHystrixCom
             protected Boolean run() {
                 try {
                     hystrixThreadStartedExecuting.set(true);
-                    Thread.sleep(100);
+                    Thread.sleep(500);
                     return true;
                 } catch (InterruptedException ex) {
                     throw new RuntimeException(ex);
