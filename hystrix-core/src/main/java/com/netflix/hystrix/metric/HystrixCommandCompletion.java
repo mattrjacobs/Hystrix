@@ -125,14 +125,14 @@ public class HystrixCommandCompletion extends HystrixCommandEvent {
 
         sb.append(getCommandKey().name()).append("[");
         for (HystrixEventType eventType: ALL_EVENT_TYPES) {
-            if (eventCounts.contains(eventType)) {
+            if (getEventCounts().contains(eventType)) {
                 foundEventTypes.add(eventType);
             }
         }
         int i = 0;
         for (HystrixEventType eventType: foundEventTypes) {
             sb.append(eventType.name());
-            int eventCount = eventCounts.getCount(eventType);
+            int eventCount = getEventCounts().getCount(eventType);
             if (eventCount > 1) {
                 sb.append("x").append(eventCount);
 

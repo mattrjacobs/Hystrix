@@ -130,7 +130,7 @@ public class HystrixRequestCacheTest {
             super(Observable.defer(new Func0<Observable<State<String>>>() {
                 @Override
                 public Observable<State<String>> call() {
-                    State<String> s = State.create(CommandDataStyle.SCALAR, clazz, HystrixCommandKey.Factory.asKey("TEST"));
+                    State<String> s = State.create(CommandDataStyle.SCALAR, clazz, HystrixCommandKey.Factory.asKey("TEST"), new HystrixCircuitBreakerTest.TestCircuitBreaker());
                     return Observable.just(s.withExecutionNotification(Notification.createOnNext(arg)));
                 }
             }));

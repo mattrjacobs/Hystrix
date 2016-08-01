@@ -1,6 +1,7 @@
 package com.netflix.hystrix.state;
 
 import com.netflix.hystrix.CommandDataStyle;
+import com.netflix.hystrix.HystrixCircuitBreaker;
 import com.netflix.hystrix.HystrixCollapser;
 import com.netflix.hystrix.HystrixCollapserKey;
 import com.netflix.hystrix.HystrixCommandKey;
@@ -29,6 +30,7 @@ public class State<R> {
     private final Class<? extends HystrixInvokable> commandClass;
     private final HystrixCommandKey commandKey;
     private final HystrixCollapserKey originatingCollapserKey;
+    private final HystrixCircuitBreaker circuitBreaker;
 
     private final EventCounts eventCounts;
     //make private
@@ -41,13 +43,15 @@ public class State<R> {
 
     private final boolean fromCache;
 
-    private State(CommandDataStyle commandDataStyle, Class<? extends HystrixInvokable> commandClass, HystrixCommandKey commandKey, HystrixCollapserKey originatingCollapserKey,
+    private State(CommandDataStyle commandDataStyle, Class<? extends HystrixInvokable> commandClass, HystrixCommandKey commandKey,
+                  HystrixCollapserKey originatingCollapserKey, HystrixCircuitBreaker circuitBreaker,
                   EventCounts eventCounts, Timing timing, CommandLifecycle commandLifecycle,
                   Run<R> run, Run<R> fallbackRun, Throwable commandThrowable, boolean fromCache) {
         this.commandDataStyle = commandDataStyle;
         this.commandClass = commandClass;
         this.commandKey = commandKey;
         this.originatingCollapserKey = originatingCollapserKey;
+        this.circuitBreaker = circuitBreaker;
         this.eventCounts = eventCounts;
         this.timing = timing;
         this.commandLifecycle = commandLifecycle;
@@ -57,14 +61,15 @@ public class State<R> {
         this.fromCache = fromCache;
     }
 
-    public static <R> State<R> create(CommandDataStyle commandDataStyle, Class<? extends HystrixInvokable> commandClass, HystrixCommandKey commandKey) {
-        return new State<R>(commandDataStyle, commandClass, commandKey, null, EventCounts.create(), Timing.startCommand(System.currentTimeMillis()),
+    public static <R> State<R> create(CommandDataStyle commandDataStyle, Class<? extends HystrixInvokable> commandClass, HystrixCommandKey commandKey, HystrixCircuitBreaker circuitBreaker) {
+        return new State<R>(commandDataStyle, commandClass, commandKey, null, circuitBreaker,
+                EventCounts.create(), Timing.startCommand(System.currentTimeMillis()),
                 CommandLifecycle.Start, Run.<R>empty(), Run.<R>empty(), null, false);
     }
 
     public static <R> State<R> create(CommandDataStyle commandDataStyle, Class<? extends HystrixInvokable> commandClass, HystrixCommandKey commandKey,
-                                      HystrixCollapserKey originatingCollapserKey, int sizeOfCollapsedBatch) {
-        return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey, EventCounts.create().plus(HystrixEventType.COLLAPSED, sizeOfCollapsedBatch),
+                                      HystrixCollapserKey originatingCollapserKey, HystrixCircuitBreaker circuitBreaker, int sizeOfCollapsedBatch) {
+        return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey, circuitBreaker, EventCounts.create().plus(HystrixEventType.COLLAPSED, sizeOfCollapsedBatch),
                 Timing.startCommand(System.currentTimeMillis()), CommandLifecycle.Start, Run.<R>empty(), Run.<R>empty(), null, false);
     }
 
@@ -187,19 +192,19 @@ public class State<R> {
     }
 
     public State<R> startSemaphoreExecution() {
-        return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey,
+        return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey, circuitBreaker,
                 eventCounts, timing.withExecutionStart(), CommandLifecycle.SemaphoreExecutionStart,
                 run, fallbackRun, commandThrowable, fromCache);
     }
 
     public State<R> startExecutionOnThread(Thread executionThread) {
-        return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey,
+        return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey, circuitBreaker,
                 eventCounts, timing.withExecutionStart(), CommandLifecycle.ThreadExecutionStart,
                 run.onThread(executionThread), fallbackRun, commandThrowable, fromCache);
     }
 
     public State<R> startFallbackExecution(Thread executionThread) {
-        return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey,
+        return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey, circuitBreaker,
                 eventCounts, timing.withFallbackStart(),
                 CommandLifecycle.FallbackStart, run, fallbackRun.onThread(executionThread), commandThrowable, fromCache);
     }
@@ -211,11 +216,11 @@ public class State<R> {
                 case OnNext:
                     switch (commandDataStyle) {
                         case SCALAR:
-                            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey,
+                            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey, circuitBreaker,
                                     eventCounts.plus(HystrixEventType.SUCCESS), updatedTiming, CommandLifecycle.Execution,
                                     run.withExecutionNotification(notification), fallbackRun, commandThrowable, fromCache);
                         case MULTIVALUED:
-                            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey,
+                            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey, circuitBreaker,
                                     eventCounts.plus(HystrixEventType.EMIT), updatedTiming, CommandLifecycle.Execution,
                                     run.withExecutionNotification(notification), fallbackRun, commandThrowable, fromCache);
                         default:
@@ -226,17 +231,18 @@ public class State<R> {
                     if (eventType.equals(HystrixEventType.SEMAPHORE_REJECTED)) {
                         logger.debug("HystrixCommand Execution Rejection by Semaphore."); // debug only since we're throwing the exception and someone higher will do something with it
                     }
-                    return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey,
+                    return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey, circuitBreaker,
                             eventCounts.plus(eventType), updatedTiming, CommandLifecycle.Execution,
                             run.withExecutionNotification(notification), fallbackRun, commandThrowable, fromCache);
                 case OnCompleted:
+                    circuitBreaker.markSuccess();
                     switch (commandDataStyle) {
                         case SCALAR:
-                            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey,
+                            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey, circuitBreaker,
                                     eventCounts, updatedTiming, CommandLifecycle.Execution,
                                     run.withExecutionNotification(notification), fallbackRun, commandThrowable, fromCache); //already sent the SUCCESS
                         case MULTIVALUED:
-                            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey,
+                            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey, circuitBreaker,
                                     eventCounts.plus(HystrixEventType.SUCCESS), updatedTiming, CommandLifecycle.Execution,
                                     run.withExecutionNotification(notification), fallbackRun, commandThrowable, fromCache);
                         default:
@@ -257,11 +263,11 @@ public class State<R> {
                 case OnNext:
                     switch (commandDataStyle) {
                         case SCALAR:
-                            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey,
+                            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey, circuitBreaker,
                                     eventCounts.plus(HystrixEventType.FALLBACK_SUCCESS), updatedTiming, CommandLifecycle.Fallback,
                                     run, fallbackRun.withExecutionNotification(notification), commandThrowable, fromCache);
                         case MULTIVALUED:
-                            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey,
+                            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey, circuitBreaker,
                                     eventCounts.plus(HystrixEventType.FALLBACK_EMIT), updatedTiming, CommandLifecycle.Fallback,
                                     run, fallbackRun.withExecutionNotification(notification), commandThrowable, fromCache);
                         default:
@@ -283,17 +289,17 @@ public class State<R> {
                     Throwable userFacingThrowable = getUserFacingThrowable(getExecutionThrowable(), notification.getThrowable(),
                             getTerminalExecutionEventType(), fallbackEventType,
                             commandClass, commandKey);
-                    return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey,
+                    return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey, circuitBreaker,
                             eventCounts.plus(fallbackEventType), updatedTiming, CommandLifecycle.Fallback,
                             run, fallbackRun.withExecutionNotification(notification), userFacingThrowable, fromCache);
                 case OnCompleted:
                     switch (commandDataStyle) {
                         case SCALAR:
-                            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey,
+                            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey, circuitBreaker,
                                     eventCounts, updatedTiming, CommandLifecycle.Fallback,
                                     run, fallbackRun.withExecutionNotification(notification), commandThrowable, fromCache); //already sent the FALLBACK_SUCCESS
                         case MULTIVALUED:
-                            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey,
+                            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey, circuitBreaker,
                                     eventCounts.plus(HystrixEventType.FALLBACK_SUCCESS), updatedTiming, CommandLifecycle.Fallback,
                                     run, fallbackRun.withExecutionNotification(notification), commandThrowable, fromCache);
                         default:
@@ -310,7 +316,7 @@ public class State<R> {
     public State<R> withShortCircuit() {
         if (!eventCounts.contains(HystrixEventType.CANCELLED)) {
             Throwable shortCircuitException = new RuntimeException("Hystrix circuit short-circuited and is OPEN");
-            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey,
+            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey, circuitBreaker,
                     eventCounts.plus(HystrixEventType.SHORT_CIRCUITED), timing.withCommandExecutionOnly(), CommandLifecycle.Execution,
                     run.withUnexecutedThrowable(shortCircuitException), fallbackRun, commandThrowable, fromCache);
         } else {
@@ -320,7 +326,7 @@ public class State<R> {
 
     public State<R> withThreadPoolRejection(Throwable threadPoolRejectionException) {
         if (!eventCounts.contains(HystrixEventType.CANCELLED)) {
-            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey,
+            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey, circuitBreaker,
                     eventCounts.plus(HystrixEventType.THREAD_POOL_REJECTED), timing.withCommandExecutionOnly(), CommandLifecycle.Execution,
                     run.withUnexecutedThrowable(threadPoolRejectionException), fallbackRun, commandThrowable, fromCache);
         } else {
@@ -331,7 +337,7 @@ public class State<R> {
     public State<R> withSemaphoreRejection() {
         if (!eventCounts.contains(HystrixEventType.CANCELLED)) {
             Throwable semaphoreRejectedException = new RuntimeException("could not acquire a semaphore for execution");
-            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey,
+            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey, circuitBreaker,
                     eventCounts.plus(HystrixEventType.SEMAPHORE_REJECTED), timing.withCommandExecutionOnly(), CommandLifecycle.Execution,
                     run.withUnexecutedThrowable(semaphoreRejectedException), fallbackRun, commandThrowable, fromCache);
         } else {
@@ -342,7 +348,7 @@ public class State<R> {
     public State<R> withTimeout() {
         if (!eventCounts.contains(HystrixEventType.CANCELLED)) {
             Throwable timeoutException = new TimeoutException();
-            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey,
+            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey, circuitBreaker,
                     eventCounts.plus(HystrixEventType.TIMEOUT), timing.withExecution(), CommandLifecycle.Execution,
                     run.withUnexecutedThrowable(timeoutException), fallbackRun, commandThrowable, fromCache);
         } else {
@@ -352,7 +358,7 @@ public class State<R> {
 
     public State<R> withBadRequest(Throwable throwable) {
         if (!eventCounts.contains(HystrixEventType.CANCELLED)) {
-            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey,
+            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey, circuitBreaker,
                     eventCounts, timing.withExecution(),
                     CommandLifecycle.End, run, fallbackRun, throwable, fromCache);
         } else {
@@ -364,7 +370,7 @@ public class State<R> {
         if (!eventCounts.contains(HystrixEventType.CANCELLED)) {
             Throwable unrecoverableErrorException = new HystrixRuntimeException(HystrixRuntimeException.FailureType.COMMAND_EXCEPTION,
                     commandClass, commandKey.name() + " and encountered unrecoverable error.", throwable, null);
-            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey,
+            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey, circuitBreaker,
                     eventCounts.plus(HystrixEventType.FAILURE), timing.withExecution(), CommandLifecycle.End,
                     run, fallbackRun, unrecoverableErrorException, fromCache);
         } else {
@@ -377,7 +383,7 @@ public class State<R> {
             Throwable fallbackSemaphoreRejectedException = new HystrixRuntimeException(HystrixRuntimeException.FailureType.REJECTED_SEMAPHORE_FALLBACK,
                     commandClass, commandKey.name() + " " + getExecutionMessageForFallbackException(getTerminalExecutionEventType()) + " and fallback execution rejected.",
                     getExecutionThrowable(), null);
-            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey,
+            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey, circuitBreaker,
                     eventCounts.plus(HystrixEventType.FALLBACK_REJECTION), timing.withCommandExecutionOnly(), CommandLifecycle.Fallback,
                     run, fallbackRun.withUnexecutedThrowable(fallbackSemaphoreRejectedException), fallbackSemaphoreRejectedException, fromCache);
         } else {
@@ -387,7 +393,7 @@ public class State<R> {
 
     public State<R> withResponseFromCache() {
         if (!eventCounts.contains(HystrixEventType.CANCELLED)) {
-            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey,
+            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey, circuitBreaker,
                     eventCounts.plus(HystrixEventType.RESPONSE_FROM_CACHE), timing.withResponseFromCache(), CommandLifecycle.ResponseFromCache,
                     run.onThread(null), fallbackRun, commandThrowable, true);
         } else {
@@ -397,7 +403,7 @@ public class State<R> {
 
     public State<R> withCancellation() {
         if (!eventCounts.contains(HystrixEventType.CANCELLED)) {
-            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey,
+            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey, circuitBreaker,
                     eventCounts.plus(HystrixEventType.CANCELLED), timing.withCancellation(), CommandLifecycle.Cancelled,
                     run, fallbackRun, commandThrowable, fromCache);
         } else {
@@ -407,7 +413,7 @@ public class State<R> {
 
     public State<R> withCollapsed(HystrixCollapserKey collapserKey, int sizeOfBatch) {
         if (!eventCounts.contains(HystrixEventType.CANCELLED)) {
-            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey,
+            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey, circuitBreaker,
                     eventCounts.plus(HystrixEventType.COLLAPSED, sizeOfBatch), timing.withCommandExecutionOnly(), CommandLifecycle.Execution,
                     run, fallbackRun, commandThrowable, fromCache);
         } else {

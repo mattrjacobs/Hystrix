@@ -303,7 +303,7 @@ import java.util.concurrent.atomic.AtomicReference;
      * @param sizeOfBatch number of commands in request batch
      */
     /* package */void markAsCollapsedCommand(HystrixCollapserKey collapserKey, int sizeOfBatch) {
-        State<R> initialCollapsedState = State.create(getCommandDataStyle(), getClass(), getCommandKey(), collapserKey, sizeOfBatch);
+        State<R> initialCollapsedState = State.create(getCommandDataStyle(), getClass(), getCommandKey(), collapserKey, circuitBreaker, sizeOfBatch);
         eventNotifier.markEvent(HystrixEventType.COLLAPSED, this.commandKey);
         stateCache.onNext(initialCollapsedState);
     }
@@ -375,7 +375,7 @@ import java.util.concurrent.atomic.AtomicReference;
                     }
                 } else {
                     //set up a new state to start execution with
-                    initialState = State.create(getCommandDataStyle(), _invokable.getClass(), _cmd.commandKey);
+                    initialState = State.create(getCommandDataStyle(), _invokable.getClass(), _cmd.commandKey, circuitBreaker);
                     stateCache.onNext(initialState); //if this command instance gets observed again, cache will be non-empty
                 }
 
@@ -414,7 +414,7 @@ import java.util.concurrent.atomic.AtomicReference;
                     public Observable<State<R>> call() {
                         final Observable<State<R>> lazyUserExecution = getExecutionStateObservable(initialState, isolationStrategy);
                         final Observable<State<R>> timeoutApplied = applyTimeout(lazyUserExecution, _cmd);
-                        final Observable<State<R>> bulkheadApplied = applyBulkhead(timeoutApplied, isolationStrategy, _cmd);
+                        final Observable<State<R>> bulkheadApplied = applyBulkhead(timeoutApplied, isolationStrategy);
                         return bulkheadApplied;
                     }
                 });
@@ -491,7 +491,6 @@ import java.util.concurrent.atomic.AtomicReference;
                             public void call() {
                                 if (commandCleanedUp.compareAndSet(false, true)) {
                                     State<R> stateBeforeCancellation = stateCache.getValue();
-                                    System.out.println("Unsubscribing going on, current state : " + stateCache.getValue() + " : " + stateBeforeCancellation.isExecutionComplete());
                                     State<R> stateAfterCancellation = stateBeforeCancellation;
                                     if (!stateBeforeCancellation.isExecutionComplete()) {
                                         stateAfterCancellation = stateBeforeCancellation.withCancellation();
@@ -567,8 +566,7 @@ import java.util.concurrent.atomic.AtomicReference;
         }
     }
 
-    private Observable<State<R>> applyBulkhead(final Observable<State<R>> userExecution, final ExecutionIsolationStrategy isolationStrategy,
-                                               final AbstractCommand<R> _cmd) {
+    private Observable<State<R>> applyBulkhead(final Observable<State<R>> userExecution, final ExecutionIsolationStrategy isolationStrategy) {
         switch (isolationStrategy) {
             case THREAD:
                 final Scheduler hystrixThreadPool = threadPool.getScheduler(new Func0<Boolean>() {
