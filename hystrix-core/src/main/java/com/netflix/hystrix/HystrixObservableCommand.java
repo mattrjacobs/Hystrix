@@ -412,7 +412,6 @@ public abstract class HystrixObservableCommand<R> extends AbstractCommand<R> imp
                                 }
                             });
                 } catch (Throwable syncFallbackEx) {
-                    System.out.println("!!! Caught syncfallback ex : " + syncFallbackEx);
                     Throwable hookEx;
                     if (shouldApplyFallbackHooks) {
                         hookEx = wrapFallbackFailureWithFallbackFailureHooks(syncFallbackEx, _cmd);

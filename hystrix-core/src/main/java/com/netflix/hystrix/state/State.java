@@ -1,6 +1,7 @@
 package com.netflix.hystrix.state;
 
 import com.netflix.hystrix.CommandDataStyle;
+import com.netflix.hystrix.ExecutionResult;
 import com.netflix.hystrix.HystrixCircuitBreaker;
 import com.netflix.hystrix.HystrixCollapser;
 import com.netflix.hystrix.HystrixCollapserKey;
@@ -104,6 +105,10 @@ public class State<R> {
         return commandLifecycle;
     }
 
+    public HystrixCollapserKey getOriginatingCollapserKey() {
+        return originatingCollapserKey;
+    }
+
     public Notification<R> getExecutionNotification() {
         return run.executionNotification;
     }
@@ -124,6 +129,10 @@ public class State<R> {
         return timing.getExecutionLatency();
     }
 
+    public long getExecutionStartTimestamp() {
+        return timing.executionStart;
+    }
+
     public Notification<R> getFallbackNotification() {
         return fallbackRun.executionNotification;
     }
@@ -134,6 +143,10 @@ public class State<R> {
 
     public EventCounts getEventCounts() {
         return eventCounts;
+    }
+
+    public ExecutionResult.EventCounts getDeprecatedEventCounts() {
+        return new ExecutionResult.EventCounts(eventCounts.getBitSet(), eventCounts.getCount(HystrixEventType.EMIT), eventCounts.getCount(HystrixEventType.FALLBACK_EMIT), eventCounts.getCount(HystrixEventType.COLLAPSED));
     }
 
     public List<HystrixEventType> getOrderedEventList() {
@@ -157,7 +170,6 @@ public class State<R> {
     }
 
     public boolean isExecutionComplete() {
-        System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " : isExecutionComplete : " + this);
         return eventCounts.isExecutionComplete();
     }
 
@@ -393,12 +405,9 @@ public class State<R> {
 
     public State<R> withResponseFromCache() {
         if (!eventCounts.contains(HystrixEventType.CANCELLED)) {
-            System.out.println("FIRST : " + this.eventCounts);
-            State<R> next =  new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey, circuitBreaker,
+            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey, circuitBreaker,
                     eventCounts.plus(HystrixEventType.RESPONSE_FROM_CACHE), timing.withResponseFromCache(), CommandLifecycle.ResponseFromCache,
                     run.onThread(null), fallbackRun, commandThrowable, true);
-            System.out.println("SECOND : " + next.eventCounts);
-            return next;
         } else {
             return this;
         }

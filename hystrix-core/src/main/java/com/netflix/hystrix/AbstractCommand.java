@@ -422,6 +422,9 @@ import java.util.concurrent.atomic.AtomicReference;
                         .flatMap(new Func1<State<R>, Observable<State<R>>>() {
                             @Override
                             public Observable<State<R>> call(State<R> state) {
+                                if (!stateCache.getValue().isCancelled()) {
+                                    stateCache.onNext(state);
+                                }
                                 if (state.getExecutionNotification() != null) {
                                     switch (state.getExecutionNotification().getKind()) {
                                         case OnError     : return applyFallback(state);
@@ -2310,7 +2313,6 @@ import java.util.concurrent.atomic.AtomicReference;
      * @return boolean
      */
     public boolean isExecutionComplete() {
-        //return commandState.get() == CommandState.TERMINAL;
         if (stateCache.hasValue()) {
             return stateCache.getValue().isExecutionComplete();
         } else {
@@ -2328,7 +2330,6 @@ import java.util.concurrent.atomic.AtomicReference;
      * @return boolean
      */
     public boolean isExecutedInThread() {
-        //return getCommandResult().isExecutedInThread();
         if (stateCache.hasValue()) {
             return stateCache.getValue().isExecutedInThread();
         } else {
@@ -2342,7 +2343,6 @@ import java.util.concurrent.atomic.AtomicReference;
      * @return boolean
      */
     public boolean isSuccessfulExecution() {
-        //return getCommandResult().getEventCounts().contains(HystrixEventType.SUCCESS);
         if (stateCache.hasValue()) {
             return stateCache.getValue().getEventCounts().contains(HystrixEventType.SUCCESS);
         } else {
@@ -2356,7 +2356,6 @@ import java.util.concurrent.atomic.AtomicReference;
      * @return boolean
      */
     public boolean isFailedExecution() {
-        //return getCommandResult().getEventCounts().contains(HystrixEventType.FAILURE);
         if (stateCache.hasValue()) {
             return stateCache.getValue().getEventCounts().isFailedExecution();
         } else {
@@ -2374,7 +2373,6 @@ import java.util.concurrent.atomic.AtomicReference;
      * @return Throwable or null
      */
     public Throwable getFailedExecutionException() {
-        //return executionResult.getException();
         if (stateCache.hasValue()) {
             State<R> state = stateCache.getValue();
             if (state.getExecutionNotification() != null) {
@@ -2401,7 +2399,6 @@ import java.util.concurrent.atomic.AtomicReference;
      * @return Throwable or null
      */
     public Throwable getExecutionException() {
-        //return executionResult.getExecutionException();
         if (stateCache.hasValue()) {
             return stateCache.getValue().getExecutionThrowable();
         } else {
@@ -2416,7 +2413,6 @@ import java.util.concurrent.atomic.AtomicReference;
      * @return boolean
      */
     public boolean isResponseFromFallback() {
-        //return getCommandResult().getEventCounts().contains(HystrixEventType.FALLBACK_SUCCESS);
         if (stateCache.hasValue()) {
             return stateCache.getValue().getEventCounts().contains(HystrixEventType.FALLBACK_SUCCESS);
         } else {
@@ -2431,9 +2427,7 @@ import java.util.concurrent.atomic.AtomicReference;
      * @return boolean
      */
     public boolean isResponseTimedOut() {
-        //return getCommandResult().getEventCounts().contains(HystrixEventType.TIMEOUT);
         if (stateCache.hasValue()) {
-            System.out.println("!!! Checking state for timeout : " + stateCache.getValue());
             return stateCache.getValue().getEventCounts().contains(HystrixEventType.TIMEOUT);
         } else {
             return false;
@@ -2447,7 +2441,6 @@ import java.util.concurrent.atomic.AtomicReference;
      * @return boolean
      */
     public boolean isResponseShortCircuited() {
-        //return getCommandResult().getEventCounts().contains(HystrixEventType.SHORT_CIRCUITED);
         if (stateCache.hasValue()) {
             return stateCache.getValue().getEventCounts().contains(HystrixEventType.SHORT_CIRCUITED);
         } else {
@@ -2474,7 +2467,6 @@ import java.util.concurrent.atomic.AtomicReference;
      * @return boolean
      */
     public boolean isResponseSemaphoreRejected() {
-        //return getCommandResult().isResponseSemaphoreRejected();
         if (stateCache.hasValue()) {
             return stateCache.getValue().getEventCounts().contains(HystrixEventType.SEMAPHORE_REJECTED);
         } else {
@@ -2488,7 +2480,6 @@ import java.util.concurrent.atomic.AtomicReference;
      * @return boolean
      */
     public boolean isResponseThreadPoolRejected() {
-        //return getCommandResult().isResponseThreadPoolRejected();
         if (stateCache.hasValue()) {
             return stateCache.getValue().getEventCounts().contains(HystrixEventType.THREAD_POOL_REJECTED);
         } else {
@@ -2502,7 +2493,6 @@ import java.util.concurrent.atomic.AtomicReference;
      * @return boolean
      */
     public boolean isResponseRejected() {
-        //return getCommandResult().isResponseRejected();
         if (stateCache.hasValue()) {
             return stateCache.getValue().getEventCounts().isRejected();
         } else {
@@ -2518,27 +2508,11 @@ import java.util.concurrent.atomic.AtomicReference;
      * @return {@code List<HystrixEventType>}
      */
     public List<HystrixEventType> getExecutionEvents() {
-        //return getCommandResult().getOrderedList();
         if (stateCache.hasValue()) {
             return stateCache.getValue().getOrderedEventList();
         } else {
             return new ArrayList<HystrixEventType>();
         }
-    }
-
-    private ExecutionResult getCommandResult() {
-        ExecutionResult resultToReturn;
-        if (executionResultAtTimeOfCancellation == null) {
-            resultToReturn = executionResult;
-        } else {
-            resultToReturn = executionResultAtTimeOfCancellation;
-        }
-
-        if (isResponseFromCache) {
-            resultToReturn = resultToReturn.addEvent(HystrixEventType.RESPONSE_FROM_CACHE);
-        }
-
-        return resultToReturn;
     }
 
     /**
@@ -2547,7 +2521,6 @@ import java.util.concurrent.atomic.AtomicReference;
      */
     @Override
     public int getNumberEmissions() {
-        //return getCommandResult().getEventCounts().getCount(HystrixEventType.EMIT);
         if (stateCache.hasValue()) {
             return stateCache.getValue().getEventCounts().getCount(HystrixEventType.EMIT);
         } else {
@@ -2566,12 +2539,10 @@ import java.util.concurrent.atomic.AtomicReference;
         } else {
             return 0;
         }
-        //return getCommandResult().getEventCounts().getCount(HystrixEventType.FALLBACK_EMIT);
     }
 
     @Override
     public int getNumberCollapsed() {
-        //return getCommandResult().getEventCounts().getCount(HystrixEventType.COLLAPSED);
         if (stateCache.hasValue()) {
             return stateCache.getValue().getEventCounts().getCount(HystrixEventType.COLLAPSED);
         } else {
@@ -2581,7 +2552,11 @@ import java.util.concurrent.atomic.AtomicReference;
 
     @Override
     public HystrixCollapserKey getOriginatingCollapserKey() {
-        return executionResult.getCollapserKey();
+        if (stateCache.hasValue()) {
+            return stateCache.getValue().getOriginatingCollapserKey();
+        } else {
+            return null;
+        }
     }
 
     /**
@@ -2590,7 +2565,6 @@ import java.util.concurrent.atomic.AtomicReference;
      * @return int
      */
     public int getExecutionTimeInMilliseconds() {
-        //return getCommandResult().getExecutionLatency();
         if (stateCache.hasValue()) {
             return (int) stateCache.getValue().getExecutionLatency();
         } else {
@@ -2605,12 +2579,20 @@ import java.util.concurrent.atomic.AtomicReference;
       * @return long
      */
     public long getCommandRunStartTimeInNanos() {
-        return executionResult.getCommandRunStartTimeInNanos();
+        if (stateCache.hasValue()) {
+            return stateCache.getValue().getExecutionStartTimestamp() * 1000;
+        } else {
+            return -1;
+        }
     }
 
     @Override
     public ExecutionResult.EventCounts getEventCounts() {
-        return getCommandResult().getEventCounts();
+        if (stateCache.hasValue()) {
+            return stateCache.getValue().getDeprecatedEventCounts();
+        } else {
+            return new ExecutionResult.EventCounts();
+        }
     }
 
     protected static Exception getExceptionFromThrowable(Throwable t) {

@@ -28,6 +28,7 @@ import rx.Observable;
 import rx.Observer;
 import rx.Subscriber;
 import rx.functions.Action1;
+import rx.functions.Func0;
 import rx.subjects.ReplaySubject;
 
 import static com.netflix.hystrix.contrib.javanica.test.common.CommonUtils.getHystrixCommandByKey;
@@ -159,41 +160,60 @@ public abstract class BasicObservableTest extends BasicHystrixTest {
 
         @HystrixCommand
         public Observable<User> getUser(final String id, final String name) {
-            validate(id, name, "getUser has failed");
-            return createObservable(id, name);
+            return Observable.defer(new Func0<Observable<User>>() {
+                @Override
+                public Observable<User> call() {
+                    try {
+                        validate(id, name, "getUser has failed");
+                    } catch (Throwable ex) {
+                        return Observable.error(ex);
+                    }
+                    return Observable.just(new User(id, name + id));
+                }
+            });
         }
 
         @HystrixCommand(fallbackMethod = "regularFallback", observableExecutionMode = ObservableExecutionMode.LAZY)
         public Observable<User> getUserRegularFallback(final String id, final String name) {
-            validate(id, name, "getUser has failed");
-            return createObservable(id, name);
+            return Observable.defer(new Func0<Observable<User>>() {
+                @Override
+                public Observable<User> call() {
+                    try {
+                        validate(id, name, "getUser has failed");
+                    } catch (Throwable ex) {
+                        return Observable.error(ex);
+                    }
+                    return Observable.just(new User(id, name + id));
+                }
+            });
         }
 
         @HystrixCommand(fallbackMethod = "rxFallback")
         public Observable<User> getUserRxFallback(final String id, final String name) {
-            validate(id, name, "getUserRxFallback has failed");
-            return createObservable(id, name);
+            return Observable.defer(new Func0<Observable<User>>() {
+                @Override
+                public Observable<User> call() {
+                    try {
+                        validate(id, name, "getUserRxFallback has failed");
+                    } catch (Throwable ex) {
+                        return Observable.error(ex);
+                    }
+                    return Observable.just(new User(id, name + id));
+                }
+            });
         }
 
         @HystrixCommand(fallbackMethod = "rxCommandFallback", observableExecutionMode = ObservableExecutionMode.LAZY)
         public Observable<User> getUserRxCommandFallback(final String id, final String name) {
-            validate(id, name, "getUserRxCommandFallback has failed");
-            return createObservable(id, name);
-        }
-
-
-        private Observable<User> createObservable(final String id, final String name) {
-            return Observable.create(new Observable.OnSubscribe<User>() {
+            return Observable.defer(new Func0<Observable<User>>() {
                 @Override
-                public void call(Subscriber<? super User> observer) {
+                public Observable<User> call() {
                     try {
-                        if (!observer.isUnsubscribed()) {
-                            observer.onNext(new User(id, name + id));
-                            observer.onCompleted();
-                        }
-                    } catch (Exception e) {
-                        observer.onError(e);
+                        validate(id, name, "getUserRxCommandFallback has failed");
+                    } catch (Throwable ex) {
+                        return Observable.error(ex);
                     }
+                    return Observable.just(new User(id, name + id));
                 }
             });
         }

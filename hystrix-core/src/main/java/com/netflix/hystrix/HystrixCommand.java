@@ -461,7 +461,7 @@ public abstract class HystrixCommand<R> extends AbstractCommand<R> implements Hy
                         });
 
 
-                return fallbackExecutionValue.startWith(fallbackExecutionStarted);
+                return fallbackExecutionValue;
             }
         });
     }

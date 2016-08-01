@@ -4538,6 +4538,7 @@ public class HystrixCommandTest extends CommonHystrixCommandTests<TestHystrixCom
 
         @Override
         protected Integer getFallback() {
+            System.out.println("***************************** RUNNING FALLBACK OFF EXCEPTION : " + this.getExecutionException());
             addLatency(fallbackLatency);
             if (fallbackResult == AbstractTestHystrixCommand.FallbackResult.SUCCESS) {
                 return FlexibleTestHystrixCommand.FALLBACK_VALUE;
