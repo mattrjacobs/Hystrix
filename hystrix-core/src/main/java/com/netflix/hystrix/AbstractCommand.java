@@ -507,7 +507,6 @@ import java.util.concurrent.atomic.AtomicReference;
                         .doOnNext(new Action1<State<R>>() {
                             @Override
                             public void call(State<R> state) {
-                                System.out.println("$$" + state.getCommandLifecycle() + "$$ " + System.currentTimeMillis() + " #" + _cmd.hashCode() + "# : " + state + " : " + state.timing);
                                 if (state.getCommandLifecycle() == State.CommandLifecycle.Start) {
                                     metrics.markExecutionStart(commandKey, threadPoolKey, isolationStrategy);
                                 }
@@ -565,7 +564,6 @@ import java.util.concurrent.atomic.AtomicReference;
                         @Override
                         public void call(State<R> state) {
                             State<R> updatedState = state.withResponseFromCache();
-                            System.out.println("$C$C$C$C " + System.currentTimeMillis() + " STATE #" + cacheKey + "# : " + updatedState + " : " + updatedState.timing);
                             stateCache.onNext(updatedState);
                         }
                     })
