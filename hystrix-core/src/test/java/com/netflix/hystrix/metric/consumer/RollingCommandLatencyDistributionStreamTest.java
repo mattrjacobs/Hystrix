@@ -319,10 +319,10 @@ public class RollingCommandLatencyDistributionStreamTest extends CommandStreamTe
         stream = RollingCommandLatencyDistributionStream.getInstance(key, 10, 100);
         stream.startCachingStreamValuesIfUnstarted();
 
-        //10 commands with latency should occupy all semaphores.  execute those, then wait for bucket to roll
+        //5 commands with latency should occupy all semaphores.  execute those, then wait for bucket to roll
         //next command should be a semaphore rejection
         List<Command> commands = new ArrayList<Command>();
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 5; i++) {
             commands.add(Command.from(groupKey, key, HystrixEventType.SUCCESS, 200, HystrixCommandProperties.ExecutionIsolationStrategy.SEMAPHORE));
         }
 
@@ -371,7 +371,7 @@ public class RollingCommandLatencyDistributionStreamTest extends CommandStreamTe
         } catch (InterruptedException ex) {
             fail("Interrupted ex");
         }
-        assertEquals(10, stream.getLatest().getTotalCount());
+        assertEquals(5, stream.getLatest().getTotalCount());
         assertBetween(200, 250, stream.getLatestMean());
         System.out.println("ReqLog : " + HystrixRequestLog.getCurrentRequest().getExecutedCommandsAsString());
         assertTrue(semaphoreRejected.isResponseSemaphoreRejected());

@@ -100,6 +100,7 @@ public abstract class CommandStreamTest {
                             .withMetricsRollingStatisticalWindowBuckets(10)
                             .withRequestCacheEnabled(true)
                             .withRequestLogEnabled(true)
+                            .withExecutionIsolationSemaphoreMaxConcurrentRequests(5)
                             .withFallbackIsolationSemaphoreMaxConcurrentRequests(5))
                     .andThreadPoolKey(HystrixThreadPoolKey.Factory.asKey(groupKey.name()))
                     .andThreadPoolPropertiesDefaults(HystrixThreadPoolProperties.Setter()

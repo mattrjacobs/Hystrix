@@ -287,17 +287,17 @@ public class RollingCommandMaxConcurrencyStreamTest extends CommandStreamTest {
         final CountDownLatch latch = new CountDownLatch(1);
         stream.observe().take(10).subscribe(getSubscriber(latch));
 
-        //10 commands executed concurrently on different caller threads should saturate semaphore
-        //once these are in-flight, execute 10 more concurrently on new caller threads.
-        //since these are semaphore-rejected, the max concurrency should be 10
+        //5 commands executed concurrently on different caller threads should saturate semaphore
+        //once these are in-flight, execute 5 more concurrently on new caller threads.
+        //since these are semaphore-rejected, the max concurrency should be 5
 
         List<Command> saturators = new ArrayList<Command>();
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 5; i++) {
             saturators.add(Command.from(groupKey, key, HystrixEventType.SUCCESS, 400, HystrixCommandProperties.ExecutionIsolationStrategy.SEMAPHORE));
         }
 
         final List<Command> rejected = new ArrayList<Command>();
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 5; i++) {
             rejected.add(Command.from(groupKey, key, HystrixEventType.SUCCESS, 100, HystrixCommandProperties.ExecutionIsolationStrategy.SEMAPHORE));
         }
 
@@ -323,7 +323,7 @@ public class RollingCommandMaxConcurrencyStreamTest extends CommandStreamTest {
 
         assertTrue(latch.await(10000, TimeUnit.MILLISECONDS));
         System.out.println("ReqLog : " + HystrixRequestLog.getCurrentRequest().getExecutedCommandsAsString());
-        assertEquals(10, stream.getLatestRollingMax());
+        assertEquals(5, stream.getLatestRollingMax());
     }
 
     @Test

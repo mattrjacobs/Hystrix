@@ -288,13 +288,13 @@ public class RollingCommandEventCounterStreamTest extends CommandStreamTest {
         final CountDownLatch latch = new CountDownLatch(1);
         stream.observe().take(10).subscribe(getSubscriber(latch));
 
-        //10 commands will saturate semaphore when called from different threads.
+        //5 commands will saturate semaphore when called from different threads.
         //submit 2 more requests and they should be SEMAPHORE_REJECTED
         //should see 10 SUCCESSes, 2 SEMAPHORE_REJECTED and 2 FALLBACK_SUCCESSes
 
         List<CommandStreamTest.Command> saturators = new ArrayList<CommandStreamTest.Command>();
 
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 5; i++) {
             saturators.add(CommandStreamTest.Command.from(groupKey, key, HystrixEventType.SUCCESS, 200, HystrixCommandProperties.ExecutionIsolationStrategy.SEMAPHORE));
         }
 
@@ -330,7 +330,7 @@ public class RollingCommandEventCounterStreamTest extends CommandStreamTest {
         assertTrue(rejected2.isResponseSemaphoreRejected());
         assertEquals(HystrixEventType.values().length, stream.getLatest().length);
         long[] expected = new long[HystrixEventType.values().length];
-        expected[HystrixEventType.SUCCESS.ordinal()] = 10;
+        expected[HystrixEventType.SUCCESS.ordinal()] = 5;
         expected[HystrixEventType.SEMAPHORE_REJECTED.ordinal()] = 2;
         expected[HystrixEventType.FALLBACK_SUCCESS.ordinal()] = 2;
         System.out.println("ReqLog : " + HystrixRequestLog.getCurrentRequest().getExecutedCommandsAsString());

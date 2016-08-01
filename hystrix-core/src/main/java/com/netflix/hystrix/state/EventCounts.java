@@ -53,7 +53,7 @@ public class EventCounts {
         this.numCollapsed = numCollapsed;
     }
 
-    private EventCounts(HystrixEventType... eventTypes) {
+    public static EventCounts from(HystrixEventType... eventTypes) {
         BitSet newBitSet = new BitSet(NUM_EVENT_TYPES);
         int localNumEmits = 0;
         int localNumFallbackEmits = 0;
@@ -77,10 +77,7 @@ public class EventCounts {
                     break;
             }
         }
-        this.events = newBitSet;
-        this.numEmissions = localNumEmits;
-        this.numFallbackEmissions = localNumFallbackEmits;
-        this.numCollapsed = localNumCollapsed;
+        return new EventCounts(newBitSet, localNumEmits, localNumFallbackEmits, localNumCollapsed);
     }
 
     EventCounts plus(HystrixEventType eventType) {

@@ -52,7 +52,11 @@ public class HystrixCommandCompletion extends HystrixCommandEvent {
 
     HystrixCommandCompletion(State<?> state, HystrixCommandKey commandKey, HystrixThreadPoolKey threadPoolKey) {
         super(commandKey, threadPoolKey);
-        this.eventCounts = state.getEventCounts();
+        if (state.getEventCounts().contains(HystrixEventType.RESPONSE_FROM_CACHE)) {
+            this.eventCounts = EventCounts.from(HystrixEventType.RESPONSE_FROM_CACHE);
+        } else {
+            this.eventCounts = state.getEventCounts();
+        }
         this.deprecatedEventCounts = null;
         this.isExecutedInThread = state.isExecutedInThread();
         this.didExecutionOccur = state.didExecutionOccur();

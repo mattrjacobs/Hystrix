@@ -398,7 +398,6 @@ import java.util.concurrent.atomic.AtomicReference;
                             logger.warn("Error calling HystrixCommandExecutionHook", hookEx);
                         }
                         return fromCache;
-
                     }
                 }
 
@@ -482,7 +481,6 @@ import java.util.concurrent.atomic.AtomicReference;
                             public void call() {
                                 if (commandCleanedUp.compareAndSet(false, true)) {
                                     metrics.markExecutionDone(stateCache.getValue(), commandKey, threadPoolKey);
-
                                 }
                             }
                         })
@@ -517,6 +515,7 @@ import java.util.concurrent.atomic.AtomicReference;
                             if (!stateBeforeCancellation.isExecutionComplete()) {
                                 stateCache.onNext(stateBeforeCancellation.withCancellation());
                             }
+                            metrics.markExecutionDone(stateCache.getValue(), commandKey, threadPoolKey);
                         }
                     })
                     .doOnNext(new Action1<State<R>>() {

@@ -393,9 +393,12 @@ public class State<R> {
 
     public State<R> withResponseFromCache() {
         if (!eventCounts.contains(HystrixEventType.CANCELLED)) {
-            return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey, circuitBreaker,
+            System.out.println("FIRST : " + this.eventCounts);
+            State<R> next =  new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey, circuitBreaker,
                     eventCounts.plus(HystrixEventType.RESPONSE_FROM_CACHE), timing.withResponseFromCache(), CommandLifecycle.ResponseFromCache,
                     run.onThread(null), fallbackRun, commandThrowable, true);
+            System.out.println("SECOND : " + next.eventCounts);
+            return next;
         } else {
             return this;
         }
