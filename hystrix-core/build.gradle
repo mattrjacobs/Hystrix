@@ -37,11 +37,12 @@ jar {
 }
 
 jmh {
-    fork = 10
-    iterations = 3
+    fork = 0
+    iterations = 100
     jmhVersion = '1.11.2'
     profilers = ['gc']
     threads = 8
+	include = 'CommandExecutionPerfTest'
     warmup = '1s'
     warmupBatchSize = 1
     warmupIterations = 5

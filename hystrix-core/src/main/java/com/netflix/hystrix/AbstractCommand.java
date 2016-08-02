@@ -34,7 +34,6 @@ import com.netflix.hystrix.util.HystrixTimer;
 import com.netflix.hystrix.util.HystrixTimer.TimerListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import rx.Notification;
 import rx.Observable;
 import rx.Observable.Operator;
 import rx.Scheduler;
@@ -513,9 +512,15 @@ import java.util.concurrent.atomic.AtomicReference;
                                 }
                             }
                         })
-                        .flatMap(new Func1<State<R>, Observable<R>>() {
+                        .filter(new Func1<State<R>, Boolean>() {
                             @Override
-                            public Observable<R> call(State<R> state) {
+                            public Boolean call(State<R> state) {
+                                return state.hasValue();
+                            }
+                        })
+                        .map(new Func1<State<R>, R>() {
+                            @Override
+                            public R call(State<R> state) {
                                 return state.getValue();
                             }
                         })
@@ -568,9 +573,15 @@ import java.util.concurrent.atomic.AtomicReference;
                             stateCache.onNext(updatedState);
                         }
                     })
-                    .flatMap(new Func1<State<R>, Observable<R>>() {
+                    .filter(new Func1<State<R>, Boolean>() {
                         @Override
-                        public Observable<R> call(State<R> state) {
+                        public Boolean call(State<R> state) {
+                            return state.hasValue();
+                        }
+                    })
+                    .map(new Func1<State<R>, R>() {
+                        @Override
+                        public R call(State<R> state) {
                             return state.getValue();
                         }
                     });
@@ -710,7 +721,7 @@ import java.util.concurrent.atomic.AtomicReference;
             return Observable.just(stateWithException.withUnrecoverableError(e));
         } else if (stateWithException.getEventCounts().contains(HystrixEventType.BAD_REQUEST)) {
             //no fallback, just return the HystrixBadRequestException
-            return Observable.just(stateWithException.withBadRequest(executionThrowable));
+            return Observable.just(stateWithException.withBadRequest( (HystrixBadRequestException) executionThrowable));
         } else {
             if (isRecoverableError(executionThrowable)) {
                 logger.warn("Recovered from java.lang.Error by serving Hystrix fallback", executionThrowable);

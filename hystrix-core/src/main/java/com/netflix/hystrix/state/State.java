@@ -40,14 +40,14 @@ public class State<R> {
     private final CommandLifecycle commandLifecycle;
     private final Run<R> run;
     private final Run<R> fallbackRun;
-    private final Throwable commandThrowable;
+    private final RuntimeException commandThrowable;
 
     private final boolean fromCache;
 
     private State(CommandDataStyle commandDataStyle, Class<? extends HystrixInvokable> commandClass, HystrixCommandKey commandKey,
                   HystrixCollapserKey originatingCollapserKey, HystrixCircuitBreaker circuitBreaker,
                   EventCounts eventCounts, Timing timing, CommandLifecycle commandLifecycle,
-                  Run<R> run, Run<R> fallbackRun, Throwable commandThrowable, boolean fromCache) {
+                  Run<R> run, Run<R> fallbackRun, RuntimeException commandThrowable, boolean fromCache) {
         this.commandDataStyle = commandDataStyle;
         this.commandClass = commandClass;
         this.commandKey = commandKey;
@@ -74,30 +74,31 @@ public class State<R> {
                 Timing.startCommand(System.currentTimeMillis()), CommandLifecycle.Start, Run.<R>empty(), Run.<R>empty(), null, false);
     }
 
-    public Observable<R> getValue() {
+    public boolean hasValue() {
+        if (commandThrowable != null) {
+            return true;
+        }
+        if (fallbackRun.executionNotification != null) {
+            return fallbackRun.executionNotification.hasValue();
+        } else if (run.executionNotification != null) {
+            return run.executionNotification.hasValue();
+        } else {
+            return false;
+        }
+    }
+
+    public R getValue() {
         //this is the only user-facing throwable that should make it out of the command
         //the run and fallbackRun may contains Throwables but those shouldn't go to users
         if (commandThrowable != null) {
-            return Observable.error(commandThrowable);
+            throw commandThrowable;
         }
         if (fallbackRun.executionNotification != null) {
-            Notification<R> n = fallbackRun.executionNotification;
-            switch (n.getKind()) {
-                case OnNext      : return Observable.just(n.getValue());
-                case OnError     : return Observable.empty(); //only send out the commandException
-                case OnCompleted : return Observable.empty();
-                default          : return Observable.error(new IllegalStateException("Unexpected Execution Notification Type : " + n.getKind()));
-            }
+            return fallbackRun.executionNotification.getValue();
         } else if (run.executionNotification != null) {
-            Notification<R> n = run.executionNotification;
-            switch (n.getKind()) {
-                case OnNext      : return Observable.just(n.getValue());
-                case OnError     : return Observable.empty(); //only send out the commandException
-                case OnCompleted : return Observable.empty();
-                default          : return Observable.error(new IllegalStateException("Unexpected Fallback Execution Notification Type : " + n.getKind()));
-            }
+            return run.executionNotification.getValue();
         } else {
-            return Observable.empty();
+            return null;
         }
     }
 
@@ -298,7 +299,7 @@ public class State<R> {
                         //} else if (fallbackEventType.equals(HystrixEventType.FALLBACK_DISABLED)) {
                     //    logger.debug("Fallback disabled for HystrixCommand so will throw HystrixRuntimeException. ", notification.getThrowable()); // debug only since we're throwing the exception and someone higher will do something with it
                     }
-                    Throwable userFacingThrowable = getUserFacingThrowable(getExecutionThrowable(), notification.getThrowable(),
+                    HystrixRuntimeException userFacingThrowable = getUserFacingThrowable(getExecutionThrowable(), notification.getThrowable(),
                             getTerminalExecutionEventType(), fallbackEventType,
                             commandClass, commandKey);
                     return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey, circuitBreaker,
@@ -368,7 +369,7 @@ public class State<R> {
         }
     }
 
-    public State<R> withBadRequest(Throwable throwable) {
+    public State<R> withBadRequest(HystrixBadRequestException throwable) {
         if (!eventCounts.contains(HystrixEventType.CANCELLED)) {
             return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey, circuitBreaker,
                     eventCounts, timing.withExecution(),
@@ -380,7 +381,7 @@ public class State<R> {
 
     public State<R> withUnrecoverableError(Throwable throwable) {
         if (!eventCounts.contains(HystrixEventType.CANCELLED)) {
-            Throwable unrecoverableErrorException = new HystrixRuntimeException(HystrixRuntimeException.FailureType.COMMAND_EXCEPTION,
+            HystrixRuntimeException unrecoverableErrorException = new HystrixRuntimeException(HystrixRuntimeException.FailureType.COMMAND_EXCEPTION,
                     commandClass, commandKey.name() + " and encountered unrecoverable error.", throwable, null);
             return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey, circuitBreaker,
                     eventCounts.plus(HystrixEventType.FAILURE), timing.withExecution(), CommandLifecycle.End,
@@ -392,7 +393,7 @@ public class State<R> {
 
     public State<R> withFallbackRejection() {
         if (!eventCounts.contains(HystrixEventType.CANCELLED)) {
-            Throwable fallbackSemaphoreRejectedException = new HystrixRuntimeException(HystrixRuntimeException.FailureType.REJECTED_SEMAPHORE_FALLBACK,
+            HystrixRuntimeException fallbackSemaphoreRejectedException = new HystrixRuntimeException(HystrixRuntimeException.FailureType.REJECTED_SEMAPHORE_FALLBACK,
                     commandClass, commandKey.name() + " " + getExecutionMessageForFallbackException(getTerminalExecutionEventType()) + " and fallback execution rejected.",
                     getExecutionThrowable(), null);
             return new State<R>(commandDataStyle, commandClass, commandKey, originatingCollapserKey, circuitBreaker,
@@ -433,7 +434,7 @@ public class State<R> {
         }
     }
 
-    private static Throwable getUserFacingThrowable(Throwable executionException, Throwable fallbackException,
+    private static HystrixRuntimeException getUserFacingThrowable(Throwable executionException, Throwable fallbackException,
                                              HystrixEventType eventType, HystrixEventType fallbackEventType,
                                              Class<? extends HystrixInvokable> commandClass, HystrixCommandKey commandKey) {
         return new HystrixRuntimeException(getFailureTypeForFallbackException(eventType), commandClass,
