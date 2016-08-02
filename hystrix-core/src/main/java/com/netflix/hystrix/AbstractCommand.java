@@ -34,6 +34,7 @@ import com.netflix.hystrix.util.HystrixTimer;
 import com.netflix.hystrix.util.HystrixTimer.TimerListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import rx.Notification;
 import rx.Observable;
 import rx.Observable.Operator;
 import rx.Scheduler;
@@ -458,46 +459,46 @@ import java.util.concurrent.atomic.AtomicReference;
                     }
                 });
 
-                final Observable<State<R>> commandExecution = executionAttempt
-                        .flatMap(new Func1<State<R>, Observable<State<R>>>() {
-                            @Override
-                            public Observable<State<R>> call(State<R> state) {
-                                if (!stateCache.getValue().isCancelled()) {
-                                    stateCache.onNext(state);
-                                }
-                                if (state.getExecutionNotification() != null) {
-                                    switch (state.getExecutionNotification().getKind()) {
-                                        case OnError     : return applyFallback(state);
-                                        case OnNext      : return Observable.just(state);
-                                        case OnCompleted : return Observable.just(state);
-                                        default          : return Observable.error(new IllegalArgumentException("Unknown notification type : " + state.getExecutionNotification().getKind()));
-                                    }
-                                } else {
-                                    if (state.getExecutionThrowable() != null) {
-                                        return applyFallback(state);
-                                    } else {
-                                        return Observable.just(state);
-                                    }
-                                }
-                            }
-                        })
-                        //write each value to the command state cache
-                        .doOnNext(new Action1<State<R>>() {
-                            @Override
-                            public void call(State<R> state) {
-                                if (!stateCache.getValue().isCancelled()) {
-                                    stateCache.onNext(state);
-                                }
-                            }
-                        });
+               final Observable<State<R>> convertExceptionIntoRealOnError = executionAttempt.map(new Func1<State<R>, State<R>>() {
+                   @Override
+                   public State<R> call(State<R> state) {
+                       if (!stateCache.getValue().isCancelled()) {
+                           stateCache.onNext(state);
+                       }
+                       if (state.getExecutionNotification() != null) {
+                           if (state.getExecutionNotification().hasThrowable()) {
+                               throw new RuntimeException(state.getExecutionNotification().getThrowable());
+                           }
+                       } else if (state.getExecutionThrowable() != null) {
+                           throw new RuntimeException(state.getExecutionThrowable());
+                       }
+                       return state;
+                   }
+               });
+
+               final Observable<State<R>> fallbackApplied = convertExceptionIntoRealOnError.onErrorResumeNext(new Func1<Throwable, Observable<? extends State<R>>>() {
+                   @Override
+                   public Observable<? extends State<R>> call(Throwable throwable) {
+                       State<R> fromException = stateCache.getValue();
+                       return applyFallback(fromException)
+                               .doOnNext(new Action1<State<R>>() {
+                                   @Override
+                                   public void call(State<R> state) {
+                                       if (!stateCache.getValue().isCancelled()) {
+                                           stateCache.onNext(state);
+                                       }
+                                   }
+                               });
+                   }
+               });
 
                 final Observable<State<R>> afterCachePut;
 
                 // put in cache
                 if (requestCacheEnabled) {
-                    afterCachePut = putIntoRequestCache(requestCache, cacheKey, commandExecution);
+                    afterCachePut = putIntoRequestCache(requestCache, cacheKey, fallbackApplied);
                 } else {
-                    afterCachePut = commandExecution;
+                    afterCachePut = fallbackApplied;
                 }
 
                 final AtomicBoolean commandCleanedUp = new AtomicBoolean(false);
