@@ -19,6 +19,8 @@ package com.netflix.hystrix.contrib.javanica.test.common.command;
 import com.netflix.hystrix.HystrixEventType;
 import com.netflix.hystrix.HystrixInvokableInfo;
 import com.netflix.hystrix.HystrixRequestLog;
+import com.netflix.hystrix.HystrixThreadPoolKey;
+import com.netflix.hystrix.HystrixThreadPoolMetrics;
 import com.netflix.hystrix.contrib.javanica.annotation.HystrixCommand;
 import com.netflix.hystrix.contrib.javanica.command.AsyncResult;
 import com.netflix.hystrix.contrib.javanica.test.common.BasicHystrixTest;
@@ -30,6 +32,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 public abstract class BasicCommandTest extends BasicHystrixTest {
@@ -37,12 +40,14 @@ public abstract class BasicCommandTest extends BasicHystrixTest {
     private UserService userService;
     private AdvancedUserService advancedUserService;
     private GenericService<String, Long, User> genericUserService;
+    private ServiceForThreadPools serviceForThreadPools;
 
     @Before
     public void setUp() throws Exception {
         userService = createUserService();
         advancedUserService = createAdvancedUserServiceService();
         genericUserService = createGenericUserService();
+        serviceForThreadPools = createServiceForThreadPools();
     }
 
     @Test
@@ -105,6 +110,86 @@ public abstract class BasicCommandTest extends BasicHystrixTest {
         assertTrue(command.getExecutionEvents().contains(HystrixEventType.FALLBACK_SUCCESS));
     }
 
+    private static class Foo {
+        int a;
+
+        Foo(int a) {
+            this.a = a;
+        }
+    }
+
+    private static class Bar {
+        int a;
+
+        Bar(int a) {
+            this.a = a;
+        }
+    }
+
+    private static class Baz {
+        int a;
+
+        Baz(int a) {
+            this.a = a;
+        }
+    }
+
+    public static class ServiceForThreadPools {
+        @HystrixCommand(commandKey = "getFoo", threadPoolKey = "one")
+        public Foo getFoo(int arg) {
+            try {
+                System.out.println("Sleeping in : " + Thread.currentThread().getName());
+                Thread.sleep(10);
+                return new Foo(arg);
+            } catch (InterruptedException ex) {
+                throw new RuntimeException(ex);
+            }
+        }
+
+        @HystrixCommand(commandKey = "getBar", threadPoolKey = "two")
+        public Bar getBar(int arg) {
+            try {
+                System.out.println("Sleeping in : " + Thread.currentThread().getName());
+                Thread.sleep(10);
+                return new Bar(arg);
+            } catch (InterruptedException ex) {
+                throw new RuntimeException(ex);
+            }
+        }
+
+        @HystrixCommand(commandKey = "getBaz", threadPoolKey = "one")
+        public Baz getBaz(int arg) {
+            try {
+                System.out.println("Sleeping in : " + Thread.currentThread().getName());
+                Thread.sleep(10);
+                return new Baz(arg);
+            } catch (InterruptedException ex) {
+                throw new RuntimeException(ex);
+            }
+        }
+    }
+
+    @Test
+    public void testThreadPoolsNamedAreSetUp() {
+        System.out.println("Starting the test in : " + Thread.currentThread().getName());
+
+        int NUM_ROUNDS = 2;
+
+        for (int i = 0; i < NUM_ROUNDS; i++) {
+            System.out.println(Thread.currentThread().getName() + " Foo = " + serviceForThreadPools.getFoo(i));
+            System.out.println(Thread.currentThread().getName() + " Bar = " + serviceForThreadPools.getBar(i));
+            System.out.println(Thread.currentThread().getName() + " Baz = " + serviceForThreadPools.getBaz(i));
+        }
+
+        for (HystrixThreadPoolMetrics metrics: HystrixThreadPoolMetrics.getInstances()) {
+            System.out.println("Metrics : " + metrics.getThreadPoolKey().name());
+        }
+
+        assertEquals(2, HystrixThreadPoolMetrics.getInstances().size());
+        assertNotNull(HystrixThreadPoolMetrics.getInstance(HystrixThreadPoolKey.Factory.asKey("one")));
+        assertNotNull(HystrixThreadPoolMetrics.getInstance(HystrixThreadPoolKey.Factory.asKey("two")));
+    }
+
 
     private void assertGetUserSnycCommandExecuted(User u1) {
         assertEquals("name: 1", u1.getName());
@@ -123,6 +208,7 @@ public abstract class BasicCommandTest extends BasicHystrixTest {
     protected abstract UserService createUserService();
     protected abstract AdvancedUserService createAdvancedUserServiceService();
     protected abstract GenericService<String, Long, User> createGenericUserService();
+    protected abstract ServiceForThreadPools createServiceForThreadPools();
 
     public interface GenericService<K1, K2, V> {
         V getByKey(K1 key1, K2 key2);

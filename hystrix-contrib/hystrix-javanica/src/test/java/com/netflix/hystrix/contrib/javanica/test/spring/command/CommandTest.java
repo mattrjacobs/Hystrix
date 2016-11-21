@@ -33,6 +33,7 @@ public abstract class CommandTest extends BasicCommandTest {
     @Autowired private BasicCommandTest.UserService userService;
     @Autowired private BasicCommandTest.AdvancedUserService advancedUserService;
     @Autowired private BasicCommandTest.GenericService<String, Long, User> genericUserService;
+    @Autowired private ServiceForThreadPools serviceForThreadPools;
 
     @Override
     protected BasicCommandTest.UserService createUserService() {
@@ -47,6 +48,11 @@ public abstract class CommandTest extends BasicCommandTest {
     @Override
     protected BasicCommandTest.GenericService<String, Long, User> createGenericUserService() {
         return genericUserService;
+    }
+
+    @Override
+    protected ServiceForThreadPools createServiceForThreadPools() {
+        return serviceForThreadPools;
     }
 
     @Configurable
@@ -65,6 +71,11 @@ public abstract class CommandTest extends BasicCommandTest {
         @Bean
         public GenericService<String, Long, User> genericUserService() {
             return new GenericUserService();
+        }
+
+        @Bean
+        public ServiceForThreadPools serviceForThreadPools() {
+            return new ServiceForThreadPools();
         }
 
     }
