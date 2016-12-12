@@ -115,6 +115,7 @@ public abstract class HystrixSampleSseServlet extends HttpServlet {
 
         /* ensure we aren't allowing more connections than we want */
         int numberConnections = incrementAndGetCurrentConcurrentConnections();
+        System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " Number of connections : " + numberConnections);
         try {
             int maxNumberConnectionsAllowed = getMaxNumberConcurrentConnectionsAllowed(); //may change at runtime, so look this up for each request
             if (numberConnections > maxNumberConnectionsAllowed) {
@@ -154,6 +155,7 @@ public abstract class HystrixSampleSseServlet extends HttpServlet {
                                         }
                                         writer.flush();
                                     } catch (IOException ioe) {
+                                        System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " Caught IOException, can release the server thread");
                                         moreDataWillBeSent.set(false);
                                     }
                                 }
@@ -164,6 +166,7 @@ public abstract class HystrixSampleSseServlet extends HttpServlet {
                     try {
                         Thread.sleep(pausePollerThreadDelayInMs);
                     } catch (InterruptedException e) {
+                        System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " Caught InterruptedException, can release the server thread");
                         moreDataWillBeSent.set(false);
                     }
                 }
