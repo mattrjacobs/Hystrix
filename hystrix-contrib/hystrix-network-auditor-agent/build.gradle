@@ -1,9 +1,12 @@
+plugins {
+  id 'com.github.johnrengelman.shadow' version '1.2.4'
+}
+
 dependencies {
     compileApi 'org.javassist:javassist:3.19+'
 
-    jar {
-        // make a fatjar otherwise it's painful getting the boot-class-path correct when deploying
-        from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } }
+	//this config applies to both jar and shadowJar
+	jar {
         manifest {
             attributes( 
                 "Agent-Class": "com.netflix.hystrix.contrib.networkauditor.HystrixNetworkAuditorAgent", 
@@ -12,5 +15,5 @@ dependencies {
                 "Boot-Class-Path": "hystrix-network-auditor-agent-" + version + ".jar",
                 "Premain-Class": "com.netflix.hystrix.contrib.networkauditor.HystrixNetworkAuditorAgent")
         }
-    }
+	}
 }

@@ -4,6 +4,7 @@ buildscript {
     }
     dependencies {
         classpath 'com.netflix.nebula:gradle-extra-configurations-plugin:3.0.3'
+		classpath 'org.apache.ant:ant:1.9.7'
     }
 }
 
