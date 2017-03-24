@@ -271,6 +271,7 @@ public class HystrixCommandTestWithCustomConcurrencyStrategy {
 
         @Override
         public <T> Callable<T> wrapCallable(Callable<T> callable) {
+            System.out.println("wrapping the callable : " + callable);
             return new LoggingCallable<T>(callable);
         }
 
