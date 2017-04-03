@@ -46,7 +46,10 @@ import rx.observers.TestSubscriber;
 import rx.schedulers.Schedulers;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CountDownLatch;
@@ -740,6 +743,58 @@ public class HystrixCommandTest extends CommonHystrixCommandTests<TestHystrixCom
         assertEquals(0, command.getBuilder().metrics.getCurrentConcurrentExecutionCount());
         assertSaneHystrixRequestLog(1);
     }
+
+    @Test
+    public void testHowLongTimeoutTakes() {
+        HystrixCommand<Boolean> warmUpCmd = new TestCommand("foo");
+        warmUpCmd.execute();
+        HystrixCommand<Boolean> cmd = new TestCommand("Foo");
+        long startTime = System.currentTimeMillis();
+        boolean done = cmd.execute();
+        System.out.println("Got : " + done + " after : " + (System.currentTimeMillis() - startTime));
+    }
+
+    public static class TestCommand extends HystrixCommand<Boolean> {
+
+        private String testStr;
+
+        public TestCommand(String testStr) {
+            super(
+                    Setter.withGroupKey(HystrixCommandGroupKey.Factory.asKey("SystemX"))
+                            .andCommandKey(HystrixCommandKey.Factory.asKey("TestCommand"))
+                            .andThreadPoolKey(HystrixThreadPoolKey.Factory.asKey("TestCommand"))
+                            .andCommandPropertiesDefaults(
+                                    HystrixCommandProperties.Setter().withExecutionTimeoutInMilliseconds(200))
+            );
+            this.testStr = testStr;
+        }
+
+        @Override
+        protected Boolean run() throws Exception {
+            System.out.println("Normal method: " + testStr);
+            Map<Integer, List<Integer>> map = new HashMap<Integer, List<Integer>>();
+            for (int i = 0; i < 5000; i++) {
+                if (!Thread.currentThread().isInterrupted()) {
+                    //System.out.println("*** " + System.currentTimeMillis() + " i=" + i);
+                    map.put(i, new ArrayList<Integer>());
+                    for (int j = 0; j < 5000; j++) {
+                        if (!Thread.currentThread().isInterrupted()) {
+                            //System.out.println("* " + System.currentTimeMillis() + " i=" + i +", j=" + j);
+                            map.get(i).add(j);
+                        }
+                    }
+                }
+            }
+            return true;
+        }
+
+        @Override
+        protected Boolean getFallback() {
+            System.out.println("Fallback method: " + testStr);
+            return false;
+        }
+    }
+
 
     /**
      * Test that the command finishing AFTER a timeout (because thread continues in background) does not register a SUCCESS
