@@ -47,17 +47,7 @@ import rx.schedulers.Schedulers;
 
 import java.io.IOException;
 import java.util.List;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.CancellationException;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -171,7 +161,7 @@ public class HystrixCommandTest extends CommonHystrixCommandTests<TestHystrixCom
         assertEquals(0, command.getBuilder().metrics.getCurrentConcurrentExecutionCount());
         assertSaneHystrixRequestLog(1);
     }
-    
+
     /**
      * Test a command execution that throws an exception that should not be wrapped.
      */
@@ -187,7 +177,7 @@ public class HystrixCommandTest extends CommonHystrixCommandTests<TestHystrixCom
         } catch (RuntimeException e) {
             assertTrue(e instanceof NotWrappedByHystrixTestRuntimeException);
         }
-        
+
         assertTrue(command.getExecutionTimeInMilliseconds() > -1);
         assertTrue(command.isFailedExecution());
         assertCommandExecutionEvents(command, HystrixEventType.FAILURE);
@@ -4443,6 +4433,65 @@ public class HystrixCommandTest extends CommonHystrixCommandTests<TestHystrixCom
                     }
                 });
     }
+
+    @Test
+    public void testBigThreadPool() throws InterruptedException {
+        class Cmd extends HystrixCommand<Integer> {
+
+            private final int arg;
+
+            Cmd(final int arg) {
+                super(Setter
+                        .withGroupKey(HystrixCommandGroupKey.Factory.asKey("Unit"))
+                        .andCommandKey(HystrixCommandKey.Factory.asKey("ThisCommand"))
+                        .andCommandPropertiesDefaults(HystrixCommandProperties.Setter()
+                                .withExecutionIsolationStrategy(ExecutionIsolationStrategy.THREAD)
+                        )
+                        .andThreadPoolPropertiesDefaults(HystrixThreadPoolProperties.Setter()
+                                .withAllowMaximumSizeToDivergeFromCoreSize(true)
+                                .withCoreSize(20)
+                                .withMaximumSize(100)
+                                .withMaxQueueSize(-1)
+                                .withQueueSizeRejectionThreshold(0)
+                        ));
+                this.arg = arg;
+            }
+
+            @Override
+            protected Integer run() throws Exception {
+                System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " starting");
+                Thread.sleep(5);
+                return arg;
+            }
+        }
+
+        System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " constructing the pool to launch commands from concurrently");
+
+        final ExecutorService executor = Executors.newFixedThreadPool(200);
+        final int NUM = 100;
+        final CountDownLatch latch = new CountDownLatch(NUM);
+
+        System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " about to launch the " + NUM + " commands concurrently");
+
+        for (int i = 0; i < NUM; i++) {
+            final int arg = i;
+            Future<Integer> f = executor.submit(new Callable<Integer>() {
+                @Override
+                public Integer call() throws Exception {
+                    int result = (new Cmd(arg)).execute();
+                    latch.countDown();
+                    System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " done with " + arg);
+                    return result;
+                }
+            });
+        }
+
+        System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " about to start the await");
+        latch.await(10000, TimeUnit.MILLISECONDS);
+        System.out.println(System.currentTimeMillis() + " : " + Thread.currentThread().getName() + " done with await");
+    }
+
+
 
     /**
      * Short-circuit? : NO
